@@ -1,4 +1,5 @@
 from opensimplex import OpenSimplex
+from scipy.ndimage import label
 import random
 import numpy as np
 import json
@@ -65,7 +66,7 @@ class CellularAutomaton:
     def run(self, steps, remove_pockets=False):
         for _ in range(steps):
             self.step()
-            if remove_pockets and _ % steps - 1 == 0:
+            if remove_pockets and _ == steps - 1:
                 self.keep_largest_alive_component()
 
     # ---------------------------
@@ -109,38 +110,23 @@ class CellularAutomaton:
         Keeps only the largest connected component of alive cells (1s).
         All other alive components are removed (set to 0).
         """
-        visited = np.zeros_like(self.grid, dtype=bool)
-        largest_component = []
-        largest_size = 0
+        # 1. Label each isolated connected area with a unique ID
+        # structure=np.ones((3,3)) would include diagonals; default is 4-connectivity
+        labeled_array, num_features = label(self.grid)
+        if num_features == 0:
+            return None
+        # 2. Count the pixels in each labeled area
+        # bincount calculates the frequency of each ID (0 is background)
+        counts = np.bincount(labeled_array.ravel())
 
-        for i in range(self.M):
-            for j in range(self.N):
-                if self.grid[i, j] == 1 and not visited[i, j]:
-                    # Flood fill this component
-                    queue = deque([(i, j)])
-                    visited[i, j] = True
-                    component = [(i, j)]
+        # 3. Find the ID of the largest area (ignoring index 0, the background)
+        print(num_features, counts)
+        largest_label = counts[1:].argmax() + 1
 
-                    while queue:
-                        x, y = queue.popleft()
-                        for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-                            nx, ny = x + dx, y + dy
-                            if 0 <= nx < self.M and 0 <= ny < self.N:
-                                if self.grid[nx, ny] == 1 and not visited[nx, ny]:
-                                    visited[nx, ny] = True
-                                    queue.append((nx, ny))
-                                    component.append((nx, ny))
-
-                    if len(component) > largest_size:
-                        largest_size = len(component)
-                        largest_component = component
-
-        # Remove all alive cells
-        self.grid[self.grid == 1] = 0
-
-        # Restore largest component
-        for i, j in largest_component:
-            self.grid[i, j] = 1
+        # 4. Create a new map where only the largest_label is kept
+        result = (labeled_array == largest_label).astype(int)
+        
+        self.grid = result
 
 
 def game_of_life_rule(state, neighbors):
@@ -194,7 +180,7 @@ def scale_spheres(spheres, scale_factor, center_point=None):
     for s in spheres:
         center = np.array(s["center"])
         # Scale relative to center_point
-        new_center = center_point + scale_factor * (center - center_point)
+        new_center = center_point + np.array([scale_factor, scale_factor, 1]) * (center - center_point)
         new_radius = s["radius"] * scale_factor
         scaled.append({"center": tuple(new_center), "radius": new_radius})
 
@@ -354,22 +340,13 @@ def generate_PE_features(circles):
 
 def generate_entrances(traversal_path, circles, graph):
 
+    spheres_w_entrance = [0]
     # First decide the entrances:
-    leafs = find_leafs(graph)
-    print("leafs", leafs)
-    max_entrances = 4 if len(circles) > 3 else len(circles)
-    spheres_w_entrance = random.choices(
-        range(len(circles)), k=random.randrange(1, max_entrances)
-    )
-    max_exits = (
-        3
-        if len(circles) - len(spheres_w_entrance) > 2
-        else len(circles) - len(spheres_w_entrance)
-    )
-    k = 1 if max_exits == 1 else random.randrange(1, max_exits)
-    spheres_w_exit = random.choices(
-        [x for x in range(len(circles)) if x not in spheres_w_entrance], k=k
-    )
+    circles_w_one_neighbor = [k for k in graph if len(graph[k]) == 1 and k != 0 and 0 not in graph[k]]
+    if not circles_w_one_neighbor:
+        spheres_w_exit = [random.randrange(1, len(circles))]
+    else:
+        spheres_w_exit = circles_w_one_neighbor
 
     entrances = []
     for ii, t in [(spheres_w_entrance, "Entrance"), (spheres_w_exit, "Exit")]:
@@ -388,15 +365,7 @@ def generate_entrances(traversal_path, circles, graph):
                 for circle in neighbors
             ]
             angle, _ = most_free_angle(neighbor_coords, origin=sphere_coords)
-            print(
-                "angle",
-                np.degrees(angle),
-                "center",
-                sphere_coords,
-                "neighbors",
-                neighbor_coords,
-            )
-            # Entrance:
+            angle = 0 if angle is None else angle
             if t == "Entrance":
                 vector_angle = np.degrees((angle + np.pi) % (2 * np.pi))
             else:
@@ -407,28 +376,13 @@ def generate_entrances(traversal_path, circles, graph):
                     + circles[sphere_idx]["radius"] * math.cos(angle),
                     circles[sphere_idx]["center"][1]
                     + circles[sphere_idx]["radius"] * math.sin(angle),
-                    circles[sphere_idx]["center"][2] + 200,
+                    circles[sphere_idx]["center"][2] + circles[sphere_idx]["radius"] * 0.2,
                     0,
                     0,
                     vector_angle,
                     t,
                 )
             )
-    print(entrances)
-
-    # Exits:
-    entrance_circle = circles[traversal_path[-1]]
-    entrances.append(
-        (
-            entrance_circle["center"][0],
-            entrance_circle["center"][1] - entrance_circle["radius"],
-            entrance_circle["center"][2] + 200,
-            0,
-            0,
-            -90,
-            "Exit",
-        )
-    )
 
     return entrances
 
@@ -453,7 +407,6 @@ def build_json(traversal_list, circles, entrances, room_num, key, settings, pe_f
     result["FloodFillLines"]["FFill_0"] = lines
 
     result["Entrances"] = {}
-    print(entrances)
     for ii, entrance in enumerate(entrances):
         result["Entrances"].update(
             {
@@ -513,27 +466,35 @@ def plot_sphere_wireframe(ax, center, radius, color="b", n=30):
 
     ax.plot_wireframe(x, y, z, color=color, linewidth=0.8)
 
+def compute_room_volume(circles) -> float:
+    min_x = min(circle[0] - circle[2] for circle in circles)
+    max_x = max(circle[0] + circle[2] for circle in circles)
+    min_y = min(circle[1] - circle[2] for circle in circles)
+    max_y = max(circle[1] + circle[2] for circle in circles)
 
-def run_automata(scale=100, height_scale=20, inverted=False, remove_pockets=True, size=15):
-    DEBUG = 0
+    return (max_x - min_x) * (max_y - min_y)
+
+def compute_room_scale_factor(circles, max_side: int) -> float:
+    target_max_volume = max_side ** 2
+    current_volume = compute_room_volume(circles)
+    scale_factor = target_max_volume / current_volume
+    return int(math.sqrt(scale_factor)) if scale_factor > 1 else 1 
+
+def run_automata(height_scale=20, inverted=False, remove_pockets=True, size=15, iterations=8, max_cube_vol=1500, randomize_size=True):
+    M = random.choices([15, size], k=1, weights=[0.66, 0.33])[0] if randomize_size else size
     ca = CellularAutomaton(
-        M=size,
-        N=size,
+        M=M,
+        N=M,
         rule=game_of_life_rule,
         p_alive=0.45,  # 25% initially alive
         boundary="wrap",
     )
-    ca.run(8, remove_pockets=remove_pockets)
+    ca.run(iterations, remove_pockets=remove_pockets)
 
     if inverted:
         ca.invert()
 
-    heightmap = generate_heightmap(ca.grid, height_scale=height_scale)
-    if DEBUG:
-        plt.imshow(heightmap, cmap="terrain")
-        plt.colorbar(label="Height")
-        plt.title("Noise-based Heightmap")
-        plt.show()
+    heightmap = generate_heightmap(ca.grid, height_scale=height_scale, seed=random.randrange(10000))
 
     skeleton = skeletonize(ca.grid)
     # Distance transform
@@ -555,22 +516,15 @@ def run_automata(scale=100, height_scale=20, inverted=False, remove_pockets=True
         for sx, sy, sr in selected_circles:
             # Distance between centers
             d = np.hypot(x - sx, y - sy)
-            if d < 0.5 * (r + sr):  # allow some small overlap, adjust 0.8 as needed
+            if d < 0.4 * (r + sr):  # allow some small overlap, adjust 0.8 as needed
                 overlap = True
                 break
         if not overlap:
             selected_circles.append((x, y, r))
 
-    if len(selected_circles) < 1:
-        return (None, None, None, None)
-
-    if DEBUG:
-        plt.imshow(ca.grid, cmap="gray")
-        for x, y, r in selected_circles:
-            circle = plt.Circle((x, y), r, color="red", fill=False, linewidth=1)
-            plt.gca().add_patch(circle)
-        plt.gca().set_aspect("equal")
-        plt.show()
+    # We skip empty rooms and rooms with 1 circle (too simple):
+    if len(selected_circles) <= 1:
+        return (None, None, None, None, None, None, None)
 
     circles_w_height = []
     for c in selected_circles:
@@ -578,126 +532,102 @@ def run_automata(scale=100, height_scale=20, inverted=False, remove_pockets=True
 
     spheres = [{"center": (c[0], c[1], c[3]), "radius": c[2]} for c in circles_w_height]
     center_point = (0, 0, 0) if len(spheres) < 1 else spheres[0]["center"]
-    scaled_spheres = scale_spheres(spheres, scale, center_point=center_point)
+    
+    scale_factor = compute_room_scale_factor(circles_w_height, max_cube_vol)
 
-    if DEBUG:
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection="3d")
-        for s in scaled_spheres:
-            plot_sphere_wireframe(ax, s["center"], s["radius"], color="gray")
-
-        # Equal aspect ratio
-        ax.set_box_aspect([1, 1, 1])
-
-        ax.set_xlabel("X")
-        ax.set_ylabel("Y")
-        ax.set_zlabel("Z")
-
-        plt.show()
+    scaled_spheres = scale_spheres(spheres, scale_factor, center_point=center_point)
 
     graph = build_graph(scaled_spheres)
-    print(graph)
     # Traverse graph
     traversal_path = greedy_dfs_min_backtrack(graph)
-    print(traversal_path)
-
-    circles = scaled_spheres
-
-    if DEBUG:
-        fig = plt.figure()
-        ax = fig.add_subplot(111, projection="3d")
-
-        for ii in traversal_path:
-            print(ii, circles[ii])
-            plot_sphere_wireframe(
-                ax, circles[ii]["center"], circles[ii]["radius"], color="gray"
-            )
-
-        # Equal aspect ratio
-        ax.set_box_aspect([1, 1, 1])
-
-        ax.set_xlabel("X")
-        ax.set_ylabel("Y")
-        ax.set_zlabel("Z")
-
-        plt.show()
-
     grid_area = area(ca.grid)
 
-    return grid_area, traversal_path, circles, graph
+    return grid_area, traversal_path, scaled_spheres, graph, heightmap, ca.grid, selected_circles
 
 
 settings = {
     "SMALL": {
-        "min_circles": 1,
-        "max_circles": 100,
+        "max_cube_vol": 1500,
         "bounds": 2500,
-        "scale": 400,
         "inverted": False,
         "PE": False,
         "remove_pockets": True,
-        "size": 15,
+        "size": 20,
+        "randomize_size": True,
         "tags": ["Rooms.Linear.CustomSmall"],
     },
     "MEDIUM": {
-        "min_circles": 5,
-        "max_circles": 8,
+        "max_cube_vol": 4500,
         "bounds": 3500,
-        "scale": 400,
         "inverted": False,
         "PE": False,
         "remove_pockets": True,
-        "size": 15,
+        "size": 30,
+        "randomize_size": True,
         "tags": ["Rooms.Linear.CustomMedium"],
     },
     "BIG": {
-        "min_circles": 8,
-        "max_circles": 20,
+        "max_cube_vol": 7000,
         "bounds": 4500,
-        "scale": 400,
         "inverted": False,
         "PE": False,
         "remove_pockets": True,
-        "size": 15,
+        "size": 45,
+        "randomize_size": True,
         "tags": ["Rooms.Linear.CustomBig"],
     },
     "PE": {
-        "min_circles": 8,
-        "max_circles": 200,
+        "max_cube_vol": 6000,
         "bounds": 4500,
-        "scale": 150,
         "inverted": True,
         "PE": True,
         "remove_pockets": False,
         "size": 50,
+        "randomize_size": False,
         "tags": ["Rooms.Linear.CustomPE"],
     },
 }
 
+DEBUG = 1
 TARGET = 20
 rooms_count = {k: 0 for k in settings}
 
-for tag in ["SMALL"]:
+for tag in settings.keys():
     while rooms_count[tag] < TARGET:
-        grid_area, traversal_path, circles, graph = run_automata(
-            scale=settings[tag]["scale"],
-            height_scale=10,
+        name = f"RMA_ICGEN_{tag}{rooms_count[tag]}.json"
+        grid_area, traversal_path, circles, graph, heightmap, ca_grid, selected_circles = run_automata(
+            height_scale=random.choices([1000], weights=[0.66], k=1)[0],
             inverted=settings[tag]["inverted"],
             remove_pockets=settings[tag]["remove_pockets"],
-            size=settings[tag]["size"]
+            size=settings[tag]["size"],
+            max_cube_vol=settings[tag]["max_cube_vol"],
+            randomize_size=settings[tag]["randomize_size"],
         )
-        if traversal_path is None:
+        print(name)
+        if traversal_path is None or len(circles) == 1:
             continue
-        if settings[tag]["min_circles"] <= len(circles) <= settings[tag]["max_circles"]:
-            entrances = generate_entrances(traversal_path, circles, graph)
-            if settings[tag]["PE"]:
-                pe_features = generate_PE_features(circles)
-            else:
-                pe_features = []
-            room_json = build_json(
-                traversal_path, circles, entrances, rooms_count[tag], tag, settings[tag], pe_features
-            )
-            name = f"RMA_ICGEN_{tag}{rooms_count[tag]}.json"
-            with open(f"generated/{name}", "w") as f:
-                json.dump(room_json, f, indent=4)
-            rooms_count[tag] += 1
+        if DEBUG:
+            plt.cla()
+            plt.imshow(heightmap, cmap="terrain")
+            plt.savefig(f"generated/debug/{name}.png")
+            plt.cla()
+            plt.imshow(ca_grid, cmap="gray")
+            for x, y, r in selected_circles:
+                circle = plt.Circle((x, y), r, color="red", fill=False, linewidth=1)
+                plt.gca().add_patch(circle)
+            plt.gca().set_aspect("equal")
+            plt.savefig(f"generated/debug/circles_{name}.png")
+
+
+        entrances = generate_entrances(traversal_path, circles, graph)
+        if settings[tag]["PE"]:
+            pe_features = generate_PE_features(circles)
+        else:
+            pe_features = []
+        room_json = build_json(
+            traversal_path, circles, entrances, rooms_count[tag], tag, settings[tag], pe_features
+        )
+        
+        with open(f"generated/{name}", "w") as f:
+            json.dump(room_json, f, indent=4)
+        rooms_count[tag] += 1
