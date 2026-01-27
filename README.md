@@ -10,4 +10,4 @@ A Python program that generates randomized caves for the game Deep Rock Galactic
 
 The result is a json defining a room that can be input into the [DRG room editor](https://github.com/vonacht/drg-room-editor/) to generate the corresponding UAssets.
 
-![snapshot](snapshot.png)
+![snapshot](img/snapshot.png)
