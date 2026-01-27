@@ -6,6 +6,7 @@ import argparse
 import matplotlib.pyplot as plt
 from skimage.morphology import skeletonize
 from scipy.ndimage import distance_transform_edt
+from pathlib import Path
 
 from automata import CellularAutomaton
 from heightmap import generate_heightmap
@@ -173,7 +174,7 @@ def main():
             try:
                 traversal_path, circles, graph, heightmap, ca_grid, selected_circles = (
                     run_automata(
-                        height_scale=2000,
+                        height_scale=2000, # 2000 seems to be a good value gameplay-wise, could be randomized
                         inverted=user_settings[tag]["inverted"],
                         remove_pockets=user_settings[tag]["remove_pockets"],
                         size=user_settings[tag]["size"],
@@ -185,16 +186,18 @@ def main():
                 continue
 
             if args.debug:
+                path = Path("generated") / "debug"
+                path.mkdir(parents=True, exist_ok=True)
                 plt.cla()
                 plt.imshow(heightmap, cmap="terrain")
-                plt.savefig(f"generated/debug/{name}.png")
+                plt.savefig(f"{path / name}.png")
                 plt.cla()
                 plt.imshow(ca_grid, cmap="gray")
                 for x, y, r in selected_circles:
                     circle = plt.Circle((x, y), r, color="red", fill=False, linewidth=1)
                     plt.gca().add_patch(circle)
                 plt.gca().set_aspect("equal")
-                plt.savefig(f"generated/debug/circles_{name}.png")
+                plt.savefig(f"{path}/circles_{name}.png")
 
             # Build the JSON:
             entrances = generate_entrances(circles, graph)
