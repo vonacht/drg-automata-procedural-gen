@@ -481,7 +481,7 @@ def compute_room_scale_factor(circles, max_side: int) -> float:
     return int(math.sqrt(scale_factor)) if scale_factor > 1 else 1 
 
 def run_automata(height_scale=20, inverted=False, remove_pockets=True, size=15, iterations=8, max_cube_vol=1500, randomize_size=True):
-    M = random.choices([15, size], k=1, weights=[0.66, 0.33])[0] if randomize_size else size
+    M = random.choices([15, size], k=1, weights=[0.33, 0.66])[0] if randomize_size else size
     ca = CellularAutomaton(
         M=M,
         N=M,
@@ -589,14 +589,14 @@ settings = {
 }
 
 DEBUG = 1
-TARGET = 20
+TARGET = 40
 rooms_count = {k: 0 for k in settings}
 
 for tag in settings.keys():
     while rooms_count[tag] < TARGET:
         name = f"RMA_ICGEN_{tag}{rooms_count[tag]}.json"
         grid_area, traversal_path, circles, graph, heightmap, ca_grid, selected_circles = run_automata(
-            height_scale=random.choices([1000], weights=[0.66], k=1)[0],
+            height_scale=2000,
             inverted=settings[tag]["inverted"],
             remove_pockets=settings[tag]["remove_pockets"],
             size=settings[tag]["size"],
