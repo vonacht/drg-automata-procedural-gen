@@ -144,8 +144,38 @@ def generate_entrances(circles, graph):
     return entrances
 
 
+def generate_pillars(circles):
+    """
+    Here we generate some random pillars, not too many, just for added decoration.
+    """
+    pillars = []
+    circles_w_pillars = random.randrange(len(circles) // 2)
+    for c in random.choices(circles, k=circles_w_pillars):
+        number_of_pillars = random.randrange(6)
+        for _ in range(number_of_pillars):
+            x = c["center"][0] + random.randrange(int(c["radius"] * 0.8)) * random.choice([-1, 1]) 
+            y = c["center"][1] + random.randrange(int(c["radius"] * 0.8)) * random.choice([-1, 1])
+            pillars.append(
+                {
+                    "Location_1": (
+                        x,
+                        y,
+                        c["center"][2],
+                    ),
+                    "Location_2": (
+                        x,
+                        y,
+                        c["center"][2] * 2 + 50,
+                    ),
+                    "Range": random.randrange(150, 160),
+                    "NoiseRange": random.randrange(200, 260)
+                }
+            )
+    return pillars
+
+
 def build_json(
-    traversal_list, circles, entrances, room_num, key, settings, pe_features
+    traversal_list, circles, entrances, pillars, room_num, key, settings, pe_features
 ) -> dict:
 
     result = {"FloodFillLines": {}}
@@ -161,6 +191,7 @@ def build_json(
                 },
                 "HRange": circle["radius"],
                 "VRange": circle["radius"],
+                "CeilingHeight": circle["radius"]
             }
         )
     result["FloodFillLines"]["FFill_0"] = lines
@@ -184,6 +215,48 @@ def build_json(
                 }
             }
         )
+
+    if pillars:
+        result["FloodFillPillars"] = {}
+        for ii, p in enumerate(pillars):
+            result["FloodFillPillars"].update(
+                {
+                    f"FloodFillPillar_{ii}": {
+                        "Points": [
+                            {
+                                "Location": {
+                                    "X": p["Location_1"][0],
+                                    "Y": p["Location_1"][1],
+                                    "Z": p["Location_1"][2]
+                                },
+                                "Range": {
+                                    "Min": p["Range"],
+                                    "Max": p["Range"] 
+                                },
+                                "NoiseRange": {
+                                    "Min": p["NoiseRange"],
+                                    "Max": p["NoiseRange"]
+                                }   
+                            },
+                            {
+                                "Location": {
+                                        "X": p["Location_2"][0],
+                                        "Y": p["Location_2"][1],
+                                        "Z": p["Location_2"][2]
+                                },
+                                "Range": {
+                                    "Min": p["Range"],
+                                    "Max": p["Range"] 
+                                },
+                                "NoiseRange": {
+                                    "Min": p["NoiseRange"],
+                                    "Max": p["NoiseRange"]
+                                }   
+                            }
+                        ]
+                    }    
+                }
+            )
 
     if pe_features:
         result["PE_MiningHead"] = {}

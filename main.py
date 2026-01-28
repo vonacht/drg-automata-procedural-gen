@@ -16,11 +16,17 @@ from utils import (
     build_graph,
     greedy_dfs_min_backtrack,
 )
-from json_builder import generate_entrances, generate_PE_features, build_json
+from json_builder import (
+    generate_entrances,
+    generate_PE_features,
+    build_json,
+    generate_pillars,
+)
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s"
 )
+
 
 class RoomTooSmall(Exception):
     pass
@@ -174,7 +180,7 @@ def main():
             try:
                 traversal_path, circles, graph, heightmap, ca_grid, selected_circles = (
                     run_automata(
-                        height_scale=2000, # 2000 seems to be a good value gameplay-wise, could be randomized
+                        height_scale=2000,  # 2000 seems to be a good value gameplay-wise, could be randomized
                         inverted=user_settings[tag]["inverted"],
                         remove_pockets=user_settings[tag]["remove_pockets"],
                         size=user_settings[tag]["size"],
@@ -200,6 +206,7 @@ def main():
                 plt.savefig(f"{path}/circles_{name}.png")
 
             # Build the JSON:
+            pillars = generate_pillars(circles)
             entrances = generate_entrances(circles, graph)
             if user_settings[tag]["PE"]:
                 pe_features = generate_PE_features(circles)
@@ -209,6 +216,7 @@ def main():
                 traversal_path,
                 circles,
                 entrances,
+                pillars,
                 rooms_count[tag],
                 tag,
                 user_settings[tag],
@@ -224,6 +232,7 @@ def main():
                 rooms_count[tag] += 1
             except Exception as e:
                 logging.error(f"Couldn't write {name}: {e}")
+
 
 if __name__ == "__main__":
     main()
