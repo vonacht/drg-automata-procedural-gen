@@ -215,10 +215,15 @@ def main():
                 pe_features,
             )
 
-            with open(f"generated/{name}", "w") as f:
-                json.dump(room_json, f, indent=4)
-            logging.info(f"Written {name} to {args.output_path}/{name}")
-            rooms_count[tag] += 1
+            try:
+                path = Path("generated")
+                path.mkdir(parents=True, exist_ok=True)
+                with open(f"generated/{name}", "w") as f:
+                    json.dump(room_json, f, indent=4)
+                logging.info(f"Written {name} to {args.output_path}/{name}")
+                rooms_count[tag] += 1
+            except Exception as e:
+                logging.error(f"Couldn't write {name}: {e}")
 
 if __name__ == "__main__":
     main()
