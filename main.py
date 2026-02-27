@@ -105,6 +105,7 @@ def create_room(
 ):
     
     verticality = random.choice(["up", "down", "flat", "heightmap"])
+    print(verticality)
     match verticality:
         case "heightmap":
             # We get a heightmap with a randomized seed:
@@ -112,9 +113,9 @@ def create_room(
                 tilemap, height_scale=height_scale, seed=random.randrange(10000)
             )
         case "up":
-            heightmap = gradient_grid(tilemap, row_weight=100, col_weight=100)
+            heightmap = gradient_grid(tilemap, row_weight=0.3, col_weight=0.3)
         case "down":
-            heightmap = gradient_grid(tilemap, col_direction="decreasing", row_direction="decreasing", row_weight=250, col_weight=250)
+            heightmap = gradient_grid(tilemap, col_direction="decreasing", row_direction="decreasing", row_weight=0.3, col_weight=0.3)
         case "flat":
             heightmap = np.zeros((tilemap.shape))
         case _:
@@ -290,15 +291,15 @@ def main():
                     scale_coeff = 1
                 case "random_walk":
                     tilemap = create_random_walk(50, 50, 100)
-                    scale_coeff = 3
+                    scale_coeff = 2
                 case _:
                     tilemap = create_random_walk(50, 50, 100)
-                    scale_coeff = 3
+                    scale_coeff = 2
             try:
                 traversal_path, scaled_circles, graph, heightmap, ca_grid, selected_circles = (
                     create_room(
                         tilemap,
-                        height_scale=2200,  # 2000 seems to be a good value gameplay-wise, could be randomized
+                        height_scale=10,  # 2000 seems to be a good value gameplay-wise, could be randomized
                         max_cube_vol=user_settings[tag]["max_cube_vol"],
                         scale_coeff=scale_coeff
                     )

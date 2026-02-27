@@ -126,10 +126,7 @@ def generate_entrances(circles, graph):
             ]
             angle, _, _ = most_free_angle(sphere_coords, neighbor_coords)
             angle = 0 if angle is None else angle
-            if t == "Entrance":
-                vector_angle = np.degrees((angle + np.pi) % (2 * np.pi))
-            else:
-                vector_angle = np.degrees(angle)
+            vector_angle = np.degrees(angle)
             entrances.append(
                 (
                     circles[sphere_idx]["center"][0]

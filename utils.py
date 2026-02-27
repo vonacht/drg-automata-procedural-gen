@@ -25,7 +25,7 @@ def scale_spheres(spheres, scale_factor, center_point=None):
     for s in spheres:
         center = np.array(s["center"])
         # Scale relative to center_point
-        new_center = center_point + np.array([scale_factor, scale_factor, 1]) * (
+        new_center = center_point + np.array([scale_factor, scale_factor, scale_factor]) * (
             center - center_point
         )
         new_radius = s["radius"] * scale_factor
@@ -101,12 +101,14 @@ def compute_room_volume(circles) -> float:
     max_x = max(circle["center"][0] + circle["radius"] for circle in circles)
     min_y = min(circle["center"][1] - circle["radius"] for circle in circles)
     max_y = max(circle["center"][1] + circle["radius"] for circle in circles)
+    min_z = min(circle["center"][2] for circle in circles)
+    max_z = max(circle["center"][2] + circle["radius"] for circle in circles)
 
-    return (max_x - min_x) * (max_y - min_y)
+    return (max_x - min_x) * (max_y - min_y) * (max_z - min_z)
 
 
 def compute_room_scale_factor(circles, max_side: int, scale_coeff: int) -> float:
-    target_max_volume = random.choice([2000, 3000, 4000]) ** 2 * scale_coeff 
+    target_max_volume = random.choice([2000, 3000, 4000]) ** 3 * scale_coeff 
     current_volume = compute_room_volume(circles)
     scale_factor = target_max_volume / current_volume
-    return int(math.sqrt(scale_factor)) if scale_factor > 1 else 1
+    return math.cbrt(scale_factor)
