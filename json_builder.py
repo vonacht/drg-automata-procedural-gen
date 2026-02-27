@@ -2,81 +2,84 @@ import random
 import numpy as np
 import math
 
+def most_free_angle(main_circle, surrounding_circles):
+    mx, my, mR = main_circle
+    blocked_intervals = []
 
-def most_free_angle(circles, origin=(0.0, 0.0)):
-    """
-    circles: list of (x, y, r)
-    origin: (ox, oy)
+    for sx, sy, sr in surrounding_circles:
+        dx = sx - mx
+        dy = sy - my
+        d = math.sqrt(dx**2 + dy**2)
 
-    returns:
-        max_free_angle (radians),
-        best_direction (radians, angle from +x axis)
-    """
+        if d == 0:
+            if sr >= mR: return None, 0, "Main circle is entirely covered."
+            continue
 
-    ox, oy = origin
-    intervals = []
+        # Law of Cosines
+        cos_alpha = (mR**2 + d**2 - sr**2) / (2 * mR * d)
 
-    for x, y, r in circles:
-        dx = x - ox
-        dy = y - oy
-        d = math.hypot(dx, dy)
+        if cos_alpha <= -1:
+            return None, 0, "Main circle is entirely covered."
+        if cos_alpha >= 1:
+            continue
 
-        # Center is fully covered
-        if d <= r:
-            return 0.0, None
+        alpha = math.acos(cos_alpha)
+        phi = math.atan2(dy, dx)
 
-        theta = math.atan2(dy, dx)
-        alpha = math.asin(min(1.0, r / d))
-
-        start = theta - alpha
-        end = theta + alpha
-
-        # Normalize to [0, 2π)
-        start = start % (2 * math.pi)
-        end = end % (2 * math.pi)
-
-        if start <= end:
-            intervals.append((start, end))
+        # Normalize to [0, 2pi]
+        start = (phi - alpha) % (2 * math.pi)
+        end = (phi + alpha) % (2 * math.pi)
+        
+        if start > end:
+            blocked_intervals.append((start, 2 * math.pi))
+            blocked_intervals.append((0, end))
         else:
-            # Wrap-around interval
-            intervals.append((start, 2 * math.pi))
-            intervals.append((0.0, end))
+            blocked_intervals.append((start, end))
 
-    if not intervals:
-        # No blockers at all
-        return 2 * math.pi, 0.0
+    if not blocked_intervals:
+        return 0.0, 2 * math.pi, "Entire perimeter is free. Midpoint set to 0."
 
-    # Sort and merge intervals
-    intervals.sort()
-    merged = [intervals[0]]
-
-    for s, e in intervals[1:]:
-        last_s, last_e = merged[-1]
-        if s <= last_e:
-            merged[-1] = (last_s, max(last_e, e))
+    # Merge intervals
+    blocked_intervals.sort()
+    merged = []
+    curr_s, curr_e = blocked_intervals[0]
+    for next_s, next_e in blocked_intervals[1:]:
+        if next_s <= curr_e:
+            curr_e = max(curr_e, next_e)
         else:
-            merged.append((s, e))
+            merged.append((curr_s, curr_e))
+            curr_s, curr_e = next_s, next_e
+    merged.append((curr_s, curr_e))
 
-    # Find largest gap
-    max_gap = 0.0
-    best_angle = None
+    # If the first and last intervals touch the 2pi boundary, merge them
+    if len(merged) > 1 and merged[0][0] == 0 and merged[-1][1] == 2 * math.pi:
+        new_start = merged[-1][0]
+        new_end = merged[0][1]
+        merged.pop()
+        merged[0] = (new_start - 2 * math.pi, new_end)
 
-    # Gaps between intervals
-    for i in range(len(merged) - 1):
-        gap = merged[i + 1][0] - merged[i][1]
-        if gap > max_gap:
-            max_gap = gap
-            best_angle = (merged[i][1] + merged[i + 1][0]) / 2
+    # Find the largest gap
+    max_gap = -1
+    best_mid = 0
+    
+    for i in range(len(merged)):
+        next_idx = (i + 1) % len(merged)
+        gap_start = merged[i][1]
+        gap_end = merged[next_idx][0]
+        
+        if next_idx == 0:
+            gap_end += 2 * math.pi
+            
+        gap_size = gap_end - gap_start
+        if gap_size > max_gap:
+            max_gap = gap_size
+            # Calculate midpoint
+            best_mid = (gap_start + gap_end) / 2
+            
+    # Normalize midpoint back to [0, 2pi]
+    best_mid = best_mid % (2 * math.pi)
 
-    # Circular gap (end → start + 2π)
-    wrap_gap = (merged[0][0] + 2 * math.pi) - merged[-1][1]
-    if wrap_gap > max_gap:
-        max_gap = wrap_gap
-        best_angle = (merged[-1][1] + merged[0][0] + 2 * math.pi) / 2
-        best_angle %= 2 * math.pi
-
-    return best_angle, max_gap
-
+    return best_mid, max_gap, f"Largest gap: {math.degrees(max_gap):.1f}°. Mid-angle: {math.degrees(best_mid):.1f}°."
 
 def generate_PE_features(circles):
     # For PE we choose a few circles at random and put the minehead there.
@@ -102,7 +105,7 @@ def generate_entrances(circles, graph):
     if not circles_w_one_neighbor:
         spheres_w_exit = [random.randrange(1, len(circles))]
     else:
-        spheres_w_exit = circles_w_one_neighbor
+        spheres_w_exit = circles_w_one_neighbor + [x for x in random.choices(range(len(circles)), k=random.randrange(1, 3)) if x not in circles_w_one_neighbor and x != 0 and 0 not in graph[x]]
 
     entrances = []
     for ii, t in [(spheres_w_entrance, "Entrance"), (spheres_w_exit, "Exit")]:
@@ -110,6 +113,7 @@ def generate_entrances(circles, graph):
             sphere_coords = (
                 circles[sphere_idx]["center"][0],
                 circles[sphere_idx]["center"][1],
+                circles[sphere_idx]["radius"],
             )
             neighbors = graph[sphere_idx]
             neighbor_coords = [
@@ -120,7 +124,7 @@ def generate_entrances(circles, graph):
                 )
                 for circle in neighbors
             ]
-            angle, _ = most_free_angle(neighbor_coords, origin=sphere_coords)
+            angle, _, _ = most_free_angle(sphere_coords, neighbor_coords)
             angle = 0 if angle is None else angle
             if t == "Entrance":
                 vector_angle = np.degrees((angle + np.pi) % (2 * np.pi))
@@ -151,26 +155,26 @@ def generate_pillars(circles):
     pillars = []
     circles_w_pillars = random.randrange(len(circles) // 2)
     for c in random.choices(circles, k=circles_w_pillars):
-        number_of_pillars = random.randrange(6)
-        for _ in range(number_of_pillars):
-            x = c["center"][0] + random.randrange(int(c["radius"] * 0.8)) * random.choice([-1, 1]) 
-            y = c["center"][1] + random.randrange(int(c["radius"] * 0.8)) * random.choice([-1, 1])
-            pillars.append(
-                {
-                    "Location_1": (
-                        x,
-                        y,
-                        c["center"][2],
-                    ),
-                    "Location_2": (
-                        x,
-                        y,
-                        c["center"][2] * 2 + 50,
-                    ),
-                    "Range": random.randrange(150, 160),
-                    "NoiseRange": random.randrange(200, 260)
-                }
-            )
+        if c["radius"] <= 500:
+            continue
+        x = c["center"][0] 
+        y = c["center"][1]
+        pillars.append(
+            {
+                "Location_1": (
+                    x,
+                    y,
+                    c["center"][2] - c["radius"] * 0.3,
+                ),
+                "Location_2": (
+                    x,
+                    y,
+                    c["center"][2] + c["radius"] * 1.3,
+                ),
+                "Range": random.randrange(150, 200),
+                "NoiseRange": random.randrange(100, 150)
+            }
+        )
     return pillars
 
 

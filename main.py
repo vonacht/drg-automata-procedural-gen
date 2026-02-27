@@ -9,6 +9,7 @@ from scipy.ndimage import distance_transform_edt
 from pathlib import Path
 
 from automata import CellularAutomaton
+
 from heightmap import generate_heightmap
 from utils import (
     compute_room_scale_factor,
@@ -41,20 +42,9 @@ def game_of_life_rule(state, neighbors):
     else:
         return 1 if alive_neighbors in SURVIVAL_THRESHOLD else 0
 
-
-def run_automata(
-    height_scale=20,
-    inverted=False,
-    remove_pockets=True,
-    size=15,
-    iterations=8,
-    max_cube_vol=1500,
-    randomize_size=True,
-):
-
-    # We create the automaton object with the desired settings:
+def run_automata(inverted=False, randomize_size=False, size=15, iterations=8, remove_pockets=True):
     M = (
-        random.choices([15, size], k=1, weights=[0.33, 0.66])[0]
+        random.choices([15, size], k=1, weights=[0.5, 0.5])[0]
         if randomize_size
         else size
     )
@@ -62,20 +52,76 @@ def run_automata(
         M=M,
         N=M,
         rule=game_of_life_rule,
-        p_alive=0.45,  # 25% initially alive
+        p_alive=0.45,  # 45% initially alive
         boundary="wrap",
     )
+
     # We run it for N iteraions:
     ca.run(iterations, remove_pockets=remove_pockets)
     if inverted:
         ca.invert()
-    # We get a heightmap with a randomized seed:
-    heightmap = generate_heightmap(
-        ca.grid, height_scale=height_scale, seed=random.randrange(10000)
-    )
+
+    return ca.grid
+
+def gradient_grid(tilemap, 
+                  row_direction="increasing", 
+                  col_direction="increasing",
+                  row_weight=1.0,
+                  col_weight=1.0):
+    """
+    Create an MxN grid where values increase or decrease
+    depending on row (x) and column (y) positions.
+    
+    Parameters:
+        M (int): number of rows
+        N (int): number of columns
+        row_direction (str): "increasing" or "decreasing"
+        col_direction (str): "increasing" or "decreasing"
+        row_weight (float): scaling factor for row contribution
+        col_weight (float): scaling factor for column contribution
+        
+    Returns:
+        numpy.ndarray: MxN array
+    """
+    M, N = tilemap.shape 
+    rows = np.arange(M, dtype=float).reshape(M, 1)
+    cols = np.arange(N, dtype=float).reshape(1, N)
+    
+    if row_direction == "decreasing":
+        rows = M - 1 - rows
+        
+    if col_direction == "decreasing":
+        cols = N - 1 - cols
+        
+    grid = row_weight * rows + col_weight * cols
+    
+    return grid
+
+def create_room(
+    tilemap,
+    height_scale=20,
+    max_cube_vol=1500,
+    scale_coeff=1
+):
+    
+    verticality = random.choice(["up", "down", "flat", "heightmap"])
+    match verticality:
+        case "heightmap":
+            # We get a heightmap with a randomized seed:
+            heightmap = generate_heightmap(
+                tilemap, height_scale=height_scale, seed=random.randrange(10000)
+            )
+        case "up":
+            heightmap = gradient_grid(tilemap, row_weight=100, col_weight=100)
+        case "down":
+            heightmap = gradient_grid(tilemap, col_direction="decreasing", row_direction="decreasing", row_weight=250, col_weight=250)
+        case "flat":
+            heightmap = np.zeros((tilemap.shape))
+        case _:
+            heightmap = np.zeros((tilemap.shape))
     # We skeletonize the tilemap to get the maximmaly inscribed circles (which will later be converted in FloodFillLines):
-    skeleton = skeletonize(ca.grid)
-    distance_map = distance_transform_edt(ca.grid)
+    skeleton = skeletonize(tilemap)
+    distance_map = distance_transform_edt(tilemap)
     # Get skeleton pixels with radius:
     ys, xs = np.where(skeleton)
     skeleton_points = [
@@ -98,26 +144,73 @@ def run_automata(
         if not overlap:
             selected_circles.append((x, y, r))
 
+    if verticality in ["up", "down"]:
+        normalized_heightmap = heightmap - heightmap[selected_circles[0][1], selected_circles[0][0]]
+    else:
+        normalized_heightmap = heightmap
+
     # We skip empty rooms and rooms with 1 circle (they are too simple even for the small rooms):
     if len(selected_circles) <= 1:
         raise RoomTooSmall
 
     # We attach the height value from the heightmap to each one of the final circles:
     spheres = [
-        {"center": (c[0], c[1], heightmap[c[1], c[0]]), "radius": c[2]}
+        {"center": (c[0], c[1], normalized_heightmap[c[1], c[0]]), "radius": c[2]}
         for c in selected_circles
     ]
     center_point = (0, 0, 0) if len(spheres) < 1 else spheres[0]["center"]
     # We scale the room based on the max_cube_vol value in the settings:
-    scale_factor = compute_room_scale_factor(spheres, max_cube_vol)
+    scale_factor = compute_room_scale_factor(spheres, max_cube_vol, scale_coeff=scale_coeff)
     scaled_spheres = scale_spheres(spheres, scale_factor, center_point=center_point)
+    for sphere in scaled_spheres:
+        if sphere["radius"] < 300:
+            raise RoomTooSmall
     # We create an adjacency graph of all the circles:
     graph = build_graph(scaled_spheres)
     # And we get the traversal path to be able to create our FloodFillLines:
     traversal_path = greedy_dfs_min_backtrack(graph)
 
-    return traversal_path, scaled_spheres, graph, heightmap, ca.grid, selected_circles
+    return traversal_path, scaled_spheres, graph, heightmap, tilemap, selected_circles
 
+def create_random_walk(M, N, steps, start=None):
+    """
+    Perform a random walk on an MxN grid.
+    
+    Parameters:
+        M (int): number of rows
+        N (int): number of columns
+        steps (int): number of steps in the walk
+        start (tuple): optional starting position (row, col)
+    
+    Returns:
+        grid (numpy array): MxN grid with visited cells marked as 1
+    """
+    
+    grid = np.zeros((M, N), dtype=int)
+    
+    # Starting position
+    if start is None:
+        row = random.randint(0, M - 1)
+        col = random.randint(0, N - 1)
+    else:
+        row, col = start
+    
+    grid[row, col] = 1
+    
+    # Possible moves: up, down, left, right
+    moves = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+
+    for _ in range(steps):
+        dr, dc = random.choice(moves)
+        new_row = row + dr
+        new_col = col + dc
+        
+        # Check boundaries
+        if 0 <= new_row < M and 0 <= new_col < N:
+            row, col = new_row, new_col
+            grid[row, col] = 1
+
+    return grid
 
 def main():
 
@@ -157,8 +250,15 @@ def main():
         default=20,
         help="Number of rooms for each key, defaults to 20.",
     )
-    args = parser.parse_args()
 
+    parser.add_argument(
+        "-s",
+        "--starting-number",
+        type=int,
+        default=0,
+        help="Where to start the numbering of the rooms, defaults to 0.",
+    )
+    args = parser.parse_args()
     try:
         with open(args.config_path, "r") as f:
             user_settings = json.load(f)
@@ -175,17 +275,32 @@ def main():
 
     for tag in keys:
         while rooms_count[tag] < args.number:
-            name = f"RMA_ICGEN_{tag}{rooms_count[tag]}.json"
-
-            try:
-                traversal_path, circles, graph, heightmap, ca_grid, selected_circles = (
-                    run_automata(
-                        height_scale=2000,  # 2000 seems to be a good value gameplay-wise, could be randomized
+            name = f"RMA_ICGEN_{tag}{rooms_count[tag]+args.starting_number}.json"
+            # Create tilemap:
+            tilemap_method = random.choice(["automaton", "random_walk"])
+            #tilemap_method = "random_walk"
+            match tilemap_method:
+                case "automaton":
+                    tilemap = run_automata(
                         inverted=user_settings[tag]["inverted"],
+                        randomize_size=user_settings[tag]["randomize_size"],
                         remove_pockets=user_settings[tag]["remove_pockets"],
                         size=user_settings[tag]["size"],
+                    )
+                    scale_coeff = 1
+                case "random_walk":
+                    tilemap = create_random_walk(50, 50, 100)
+                    scale_coeff = 3
+                case _:
+                    tilemap = create_random_walk(50, 50, 100)
+                    scale_coeff = 3
+            try:
+                traversal_path, scaled_circles, graph, heightmap, ca_grid, selected_circles = (
+                    create_room(
+                        tilemap,
+                        height_scale=2200,  # 2000 seems to be a good value gameplay-wise, could be randomized
                         max_cube_vol=user_settings[tag]["max_cube_vol"],
-                        randomize_size=user_settings[tag]["randomize_size"],
+                        scale_coeff=scale_coeff
                     )
                 )
             except RoomTooSmall:
@@ -206,15 +321,16 @@ def main():
                 plt.savefig(f"{path}/circles_{name}.png")
 
             # Build the JSON:
-            pillars = generate_pillars(circles)
-            entrances = generate_entrances(circles, graph)
+            pillars = generate_pillars(scaled_circles)
+            #pillars = []
+            entrances = generate_entrances(scaled_circles, graph)
             if user_settings[tag]["PE"]:
-                pe_features = generate_PE_features(circles)
+                pe_features = generate_PE_features(scaled_circles)
             else:
                 pe_features = []
             room_json = build_json(
                 traversal_path,
-                circles,
+                scaled_circles,
                 entrances,
                 pillars,
                 rooms_count[tag],
@@ -228,7 +344,7 @@ def main():
                 path.mkdir(parents=True, exist_ok=True)
                 with open(f"generated/{name}", "w") as f:
                     json.dump(room_json, f, indent=4)
-                logging.info(f"Written {name} to {args.output_path}/{name}")
+                logging.info(f"Written {name} to {args.output_path}/{name}, method: {tilemap_method}")
                 rooms_count[tag] += 1
             except Exception as e:
                 logging.error(f"Couldn't write {name}: {e}")

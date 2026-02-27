@@ -1,5 +1,6 @@
 import math
 import numpy as np
+import random
 
 
 def scale_spheres(spheres, scale_factor, center_point=None):
@@ -104,8 +105,8 @@ def compute_room_volume(circles) -> float:
     return (max_x - min_x) * (max_y - min_y)
 
 
-def compute_room_scale_factor(circles, max_side: int) -> float:
-    target_max_volume = max_side**2
+def compute_room_scale_factor(circles, max_side: int, scale_coeff: int) -> float:
+    target_max_volume = random.choice([2000, 3000, 4000]) ** 2 * scale_coeff 
     current_volume = compute_room_volume(circles)
     scale_factor = target_max_volume / current_volume
     return int(math.sqrt(scale_factor)) if scale_factor > 1 else 1

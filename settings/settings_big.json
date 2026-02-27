@@ -1,0 +1,50 @@
+{
+  "SMALL": {
+    "max_cube_vol": 12000,
+    "bounds": 6000,
+    "inverted": false,
+    "PE": false,
+    "remove_pockets": true,
+    "size": 15,
+    "randomize_size": false,
+    "tags": [
+      "Rooms.Linear.CustomSmall"
+    ]
+  },
+  "MEDIUM": {
+    "max_cube_vol": 12000,
+    "bounds": 6000,
+    "inverted": false,
+    "PE": false,
+    "remove_pockets": true,
+    "size": 15,
+    "randomize_size": false,
+    "tags": [
+      "Rooms.Linear.CustomMedium"
+    ]
+  },
+  "BIG": {
+    "max_cube_vol": 12000,
+    "bounds": 6000,
+    "inverted": false,
+    "PE": false,
+    "remove_pockets": true,
+    "size": 15,
+    "randomize_size": false,
+    "tags": [
+      "Rooms.Linear.CustomBig"
+    ]
+  },
+  "PE": {
+    "max_cube_vol": 14000,
+    "bounds": 4500,
+    "inverted": true,
+    "PE": true,
+    "remove_pockets": false,
+    "size": 50,
+    "randomize_size": false,
+    "tags": [
+      "Rooms.Linear.CustomPE"
+    ]
+  }
+}
