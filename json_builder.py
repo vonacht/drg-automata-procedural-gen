@@ -152,7 +152,7 @@ def generate_pillars(circles):
     pillars = []
     circles_w_pillars = random.randrange(len(circles) // 2)
     for c in random.choices(circles, k=circles_w_pillars):
-        if c["radius"] <= 500:
+        if c["radius"] < 400:
             continue
         x = c["center"][0] 
         y = c["center"][1]

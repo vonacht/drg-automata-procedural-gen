@@ -1,12 +1,14 @@
 import random
 import numpy as np
 import json
+import math
 import logging
 import argparse
 import matplotlib.pyplot as plt
 from skimage.morphology import skeletonize
 from scipy.ndimage import distance_transform_edt
 from pathlib import Path
+from itertools import product
 
 from automata import CellularAutomaton
 
@@ -101,11 +103,12 @@ def create_room(
     tilemap,
     height_scale=20,
     max_cube_vol=1500,
-    scale_coeff=1
+    scale_coeff=1,
+    verticality=None
 ):
     
-    verticality = random.choice(["up", "down", "flat", "heightmap"])
-    print(verticality)
+    verticality = random.choice(["up", "down", "flat", "heightmap"]) if verticality is None else verticality
+    cliff = random.choice([True, False])
     match verticality:
         case "heightmap":
             # We get a heightmap with a randomized seed:
@@ -145,23 +148,36 @@ def create_room(
         if not overlap:
             selected_circles.append((x, y, r))
 
+    # We skip empty rooms and rooms with 1 circle (they are too simple even for the small rooms):
+    if len(selected_circles) <= 1:
+        raise RoomTooSmall
+
     if verticality in ["up", "down"]:
         normalized_heightmap = heightmap - heightmap[selected_circles[0][1], selected_circles[0][0]]
     else:
         normalized_heightmap = heightmap
 
-    # We skip empty rooms and rooms with 1 circle (they are too simple even for the small rooms):
-    if len(selected_circles) <= 1:
-        raise RoomTooSmall
 
     # We attach the height value from the heightmap to each one of the final circles:
-    spheres = [
-        {"center": (c[0], c[1], normalized_heightmap[c[1], c[0]]), "radius": c[2]}
-        for c in selected_circles
-    ]
+    if verticality in ["down"] and cliff:
+        print(verticality, cliff)
+        num_circles = len(selected_circles) // 2
+        spheres = [
+                {
+                    "center": (c[0], c[1],
+                               normalized_heightmap[c[1], c[0]] + cliff_factor(ii, num_circles, verticality)),
+                    "radius": c[2]
+                    }
+                for ii, c in enumerate(selected_circles)
+                ]
+    else:
+        spheres = [
+            {"center": (c[0], c[1], normalized_heightmap[c[1], c[0]]), "radius": c[2]}
+            for c in selected_circles
+        ]
     center_point = (0, 0, 0) if len(spheres) < 1 else spheres[0]["center"]
     # We scale the room based on the max_cube_vol value in the settings:
-    scale_factor = compute_room_scale_factor(spheres, max_cube_vol, scale_coeff=scale_coeff)
+    scale_factor = compute_room_scale_factor(spheres, optional_size=max_cube_vol, scale_coeff=scale_coeff)
     scaled_spheres = scale_spheres(spheres, scale_factor, center_point=center_point)
     for sphere in scaled_spheres:
         if sphere["radius"] < 300:
@@ -172,6 +188,15 @@ def create_room(
     traversal_path = greedy_dfs_min_backtrack(graph)
 
     return traversal_path, scaled_spheres, graph, heightmap, tilemap, selected_circles
+
+def cliff_factor(ii, num_circles, verticality):
+    result = 0
+    match verticality:
+        case "up":
+            result = 2 if ii > num_circles else 0 
+        case "down":
+            result = -2 if ii > num_circles else 0 
+    return result
 
 def create_random_walk(M, N, steps, start=None):
     """
@@ -213,6 +238,97 @@ def create_random_walk(M, N, steps, start=None):
 
     return grid
 
+def generate_tunnel_rooms():
+    tunnels = {"L": [(0,0,0), (0,1,0), (1,1,0)],
+               "U": [(0,0,0), (0,1,0), (1,1,0), (1,0,0)],
+               "arcR": [(0,0,0), (0, 3.5, 0)],
+               "arcL": [(0,0,0), (0, 3.5, 0)]}
+    sizes = {"small": 1500, "medium": 2500, "big": 4000}
+    for tunnel, verticality, size in product(tunnels, ["up", "down", "flat"], sizes):
+        generate_tunnel_room(tunnel, tunnels[tunnel], verticality, size, sizes[size])
+
+def generate_tunnel_room(tunnel_type, tunnel_base, verticality, size_tag, size):
+    match tunnel_type:
+        case "L" | "U":
+            base = tunnel_base
+        case "arcL": 
+            base = sample_quadratic_bezier(tunnel_base[0], (5, 1.5, 0), tunnel_base[1], num_points=10)
+        case "arcR": 
+            base = sample_quadratic_bezier(tunnel_base[0], (-5, 1.5, 0), tunnel_base[1], num_points=10)
+
+    match verticality:
+        case "flat":
+            base = [{"center": b, "radius": 0.4} for b in base]
+            number = 0
+        case "up":
+            base = [{"center": (b[0], b[1], b[1]), "radius": 0.5} for b in base]
+            number = 1
+        case "down":
+            base = [{"center": (b[0], b[1], -b[1]), "radius": 0.5} for b in base]
+            number = 2
+    scale_factor = compute_room_scale_factor(base, 1, optional_size=size)
+    scaled_spheres = scale_spheres(base, scale_factor)
+    first_point, last_point = scaled_spheres[0], scaled_spheres[-1]
+    entrance = (
+            first_point["center"][0], first_point["center"][1] - first_point["radius"], first_point["center"][2],
+            0, 0, -90, "Entrance"
+            )
+    exit = (
+            last_point["center"][0], last_point["center"][1] + last_point["radius"], last_point["center"][2],
+            0, 0, 0, "Exit"
+            )
+    pillars = []
+    pe_features = []
+    tags = {"small": ["Rooms.Linear.CustomSmall"],
+            "medium": ["Rooms.Linear.CustomMedium"],
+            "big": ["Rooms.Linear.CustomBig"]}
+    room_json = build_json(
+        list(range(len(scaled_spheres))),
+        scaled_spheres,
+        [entrance, exit],
+        pillars,
+        number,
+        f"tunnel_{size_tag.upper()}{tunnel_type.upper()}",
+        {"bounds": size, "tags": tags[size_tag]},
+        pe_features,
+    )
+
+    name = f"RMA_ICGEN_TUNNEL_{size_tag.upper()}{tunnel_type.upper()}{number}.json"
+
+    try:
+        path = Path("generated")
+        path.mkdir(parents=True, exist_ok=True)
+        with open(f"generated/{name}", "w") as f:
+            json.dump(room_json, f, indent=4)
+        logging.info(f"Written {name} to generated/{name}, method: tunnel")
+    except Exception as e:
+        logging.error(f"Couldn't write {name}: {e}")
+    
+
+def sample_quadratic_bezier(p0, p1, p2, num_points=100):
+    """
+    Sample points along a quadratic Bézier curve.
+
+    Parameters:
+        p0, p1, p2 : tuple or list of (x, y)
+            Start point, control point, and end point.
+        num_points : int
+            Number of samples along the curve.
+
+    Returns:
+        numpy.ndarray of shape (num_points, 2)
+    """
+    p0 = np.array(p0, dtype=float)
+    p1 = np.array(p1, dtype=float)
+    p2 = np.array(p2, dtype=float)
+
+    t = np.linspace(0, 1, num_points)
+    points = ((1 - t)**2)[:, None] * p0 \
+           + (2 * (1 - t) * t)[:, None] * p1 \
+           + (t**2)[:, None] * p2
+
+    return points
+
 def main():
 
     parser = argparse.ArgumentParser(description="Procedural generation of DRG rooms.")
@@ -243,6 +359,12 @@ def main():
         action="store_true",
         help="If present, the program will print the images of the caves in the generated/debug directory.",
     )
+    parser.add_argument(
+        "-t",
+        "--tunnels",
+        action="store_true",
+        help="If present, we will generate the fixed tunnel rooms.",
+    )
 
     parser.add_argument(
         "-n",
@@ -260,6 +382,11 @@ def main():
         help="Where to start the numbering of the rooms, defaults to 0.",
     )
     args = parser.parse_args()
+
+    if args.tunnels:
+        generate_tunnel_rooms()
+        return 0
+
     try:
         with open(args.config_path, "r") as f:
             user_settings = json.load(f)
@@ -300,8 +427,9 @@ def main():
                     create_room(
                         tilemap,
                         height_scale=10,  # 2000 seems to be a good value gameplay-wise, could be randomized
-                        max_cube_vol=user_settings[tag]["max_cube_vol"],
-                        scale_coeff=scale_coeff
+                        max_cube_vol=user_settings[tag].get("max_cube_vol"),
+                        scale_coeff=scale_coeff,
+                        verticality=user_settings[tag].get("verticality")
                     )
                 )
             except RoomTooSmall:
