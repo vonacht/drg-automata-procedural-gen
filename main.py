@@ -241,9 +241,10 @@ def run_doublerooms(mixed):
     tags = {"small": 2000, "medium": 2000, "big": 2000}
     for i in range(8):
         for k, v in tags.items():
-            generate_doubleroom(k, i, v, mixed)
+            generate_doubleroom(k, i, v, mixed, "dive")
+            generate_doubleroom(k, i, v, mixed, "overlap")
 
-def generate_doubleroom(tag, room_num, size, mixed):
+def generate_doubleroom(tag, room_num, size, mixed, room_type):
     
     def make_one_room():
         while True:
@@ -271,31 +272,50 @@ def generate_doubleroom(tag, room_num, size, mixed):
     a1, a2, a3, *_ = make_one_room()
     b1, b2, b3, *_ = make_one_room()
 
-    # Decide if angled or straight down:
-    angle = random.choice(["vertical", "angle"])
-    match angle:
-        case "vertical":
-            xshift = 0
-            yshift = 0
-        case "angle":
-            xshift = random.randrange(1000, 1500)
-            yshift = random.randrange(1000, 1500)
-
-    print(angle, xshift, yshift)
-    # Get coordinates of last point of first room:
-    pit_center = random.choice([0, -1])
-    # Modify the coordinates of the second room:
-    shift_vector = np.array(a2[pit_center]["center"]) - np.array(b2[0]["center"])
-    b2 = [{"center": (c["center"][0] + shift_vector[0] + xshift, c["center"][1] + shift_vector[1] + yshift, c["center"][2] - random.randrange(1500, 2000)), "radius": c["radius"]} for c in b2]
-    shaft = [{"center": a2[pit_center]["center"], "radius": a2[pit_center]["radius"]*0.7}, {"center": b2[0]["center"], "radius": b2[0]["radius"]*0.7}]
-    # Append room and traversal paths:
-    new_room = [a2] + [b2] + [shaft]
-    traversal_paths = [a1] + [b1] + [[0, 1]]
-    # Entrances:
-    first_entrances = [b for b in generate_entrances(a2, a3) if b[-1] == "Entrance"]
-    second_entrances = [b for b in generate_entrances(b2, b3) if b[-1] == "Exit"]
-    pillars = []
-    pe = []
+    match room_type:
+        case "dive":
+            # Decide if angled or straight down:
+            angle = random.choice(["vertical", "angle"])
+            match angle:
+                case "vertical":
+                    xshift = 0
+                    yshift = 0
+                case "angle":
+                    xshift = random.randrange(1000, 1500)
+                    yshift = random.randrange(1000, 1500)
+            # Get coordinates of last point of first room:
+            pit_center = random.choice([0, -1])
+            # Modify the coordinates of the second room:
+            shift_vector = np.array(a2[pit_center]["center"]) - np.array(b2[0]["center"])
+            b2 = [{"center": (c["center"][0] + shift_vector[0] + xshift, c["center"][1] + shift_vector[1] + yshift, c["center"][2] - random.randrange(1500, 2000)), "radius": c["radius"]} for c in b2]
+            shaft = [{"center": a2[pit_center]["center"], "radius": a2[pit_center]["radius"]*0.7}, {"center": b2[0]["center"], "radius": b2[0]["radius"]*0.7}]
+            # Append room and traversal paths:
+            new_room = [a2] + [b2] + [shaft]
+            traversal_paths = [a1] + [b1] + [[0, 1]]
+            # Entrances:
+            first_entrances = [b for b in generate_entrances(a2, a3) if b[-1] == "Entrance"]
+            second_entrances = [b for b in generate_entrances(b2, b3) if b[-1] == "Exit"]
+            pillars = []
+            pe = []
+            name = f"RMA_ICGEN_{tag.upper()}_DOUBLEROOM{room_num}.json"
+        case "overlap":
+            direction_vector = np.array(a2[-1]["center"]) - np.array(
+                a2[0]["center"]
+            )
+            perpendicular_vector = perpendicular_2d_normalized(direction_vector)
+            a_copy = [{"center": (c["center"][0] + perpendicular_vector[0] + a2[0]["radius"] * 0.7,
+                                  c["center"][1] - perpendicular_vector[1] + a2[0]["radius"] * 0.7,
+                                  c["center"][2]),
+                       "radius": c["radius"],
+                       "floor_depth": -random.randrange(500, 1000)} for c in a2]
+            new_room = [a2] + [a_copy]
+            traversal_paths = [a1] + [a1]
+            # Entrances:
+            first_entrances = [b for b in generate_entrances(a2, a3) if b[-1] == "Entrance"]
+            second_entrances = [b for b in generate_entrances(a_copy, a3) if b[-1] == "Exit"]
+            pillars = []
+            pe = []
+            name = f"RMA_ICGEN_{tag.upper()}_OVERLAPROOM{room_num}.json"
     if not mixed:
         tags = {"small": ["Rooms.Linear.CustomSmall"],
                 "medium": ["Rooms.Linear.CustomMedium"],
@@ -316,9 +336,6 @@ def generate_doubleroom(tag, room_num, size, mixed):
             pe
             )
 
-
-    name = f"RMA_ICGEN_{tag.upper()}_DOUBLEROOM{room_num}.json"
-
     try:
         path = Path("generated")
         path.mkdir(parents=True, exist_ok=True)
@@ -328,6 +345,16 @@ def generate_doubleroom(tag, room_num, size, mixed):
     except Exception as e:
         logging.error(f"Couldn't write {name}: {e}")
    
+
+def perpendicular_2d_normalized(v):
+    x, y, _ = v
+    px, py = -y, x
+    
+    magnitude = math.hypot(px, py)
+    if magnitude == 0:
+        raise ValueError("Zero vector has no defined perpendicular direction")
+    
+    return (px / magnitude, py / magnitude)
 
 def generate_tunnel_rooms(mixed):
     tunnels = {"L": [(0,0,0), (0,1,0), (1,1,0)],

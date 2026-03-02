@@ -134,6 +134,7 @@ def generate_entrances(circles, graph):
                     circles[sphere_idx]["center"][1]
                     + circles[sphere_idx]["radius"] * math.sin(angle),
                     circles[sphere_idx]["center"][2]
+                    + circles[sphere_idx].get("floor_depth", 0)
                     + circles[sphere_idx]["radius"] * 0.2,
                     0,
                     0,
@@ -192,7 +193,8 @@ def build_json_multiple_ffill(
                     },
                     "HRange": circle["radius"],
                     "VRange": circle["radius"],
-                    "CeilingHeight": circle["radius"]
+                    "CeilingHeight": circle["radius"],
+                    "FloorDepth": circle.get("floor_depth", 0)
                 }
             )
         result["FloodFillLines"][f"FFill_{jj}"] = lines
