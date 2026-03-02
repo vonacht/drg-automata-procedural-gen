@@ -1,6 +1,6 @@
 {
   "SMALL": {
-    "max_cube_vol": 1500,
+    "max_cube_vol": 2000,
     "bounds": 2500,
     "inverted": false,
     "PE": false,

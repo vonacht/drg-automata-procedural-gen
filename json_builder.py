@@ -174,6 +174,107 @@ def generate_pillars(circles):
         )
     return pillars
 
+def build_json_multiple_ffill(
+    traversal_list, circles, entrances, pillars, room_num, key, settings, pe_features
+) -> dict:
+
+    result = {"FloodFillLines": {}}
+    for jj, (ffill, traversal) in enumerate(zip(circles, traversal_list)):
+        lines = {"Points": []}
+        for ii in traversal:
+            circle = ffill[ii]
+            lines["Points"].append(
+                {
+                    "Location": {
+                        "X": circle["center"][0],
+                        "Y": circle["center"][1],
+                        "Z": circle["center"][2],
+                    },
+                    "HRange": circle["radius"],
+                    "VRange": circle["radius"],
+                    "CeilingHeight": circle["radius"]
+                }
+            )
+        result["FloodFillLines"][f"FFill_{jj}"] = lines
+
+    result["Entrances"] = {}
+    for ii, entrance in enumerate(entrances):
+        result["Entrances"].update(
+            {
+                f"Entrance_{ii}": {
+                    "Location": {
+                        "X": entrance[0],
+                        "Y": entrance[1],
+                        "Z": entrance[2],
+                    },
+                    "Type": entrance[-1],
+                    "Direction": {
+                        "Roll": entrance[3],
+                        "Pitch": entrance[4],
+                        "Yaw": entrance[5],
+                    },
+                }
+            }
+        )
+
+    if pillars:
+        result["FloodFillPillars"] = {}
+        for ii, p in enumerate(pillars):
+            result["FloodFillPillars"].update(
+                {
+                    f"FloodFillPillar_{ii}": {
+                        "Points": [
+                            {
+                                "Location": {
+                                    "X": p["Location_1"][0],
+                                    "Y": p["Location_1"][1],
+                                    "Z": p["Location_1"][2]
+                                },
+                                "Range": {
+                                    "Min": p["Range"],
+                                    "Max": p["Range"] 
+                                },
+                                "NoiseRange": {
+                                    "Min": p["NoiseRange"],
+                                    "Max": p["NoiseRange"]
+                                }   
+                            },
+                            {
+                                "Location": {
+                                        "X": p["Location_2"][0],
+                                        "Y": p["Location_2"][1],
+                                        "Z": p["Location_2"][2]
+                                },
+                                "Range": {
+                                    "Min": p["Range"],
+                                    "Max": p["Range"] 
+                                },
+                                "NoiseRange": {
+                                    "Min": p["NoiseRange"],
+                                    "Max": p["NoiseRange"]
+                                }   
+                            }
+                        ]
+                    }    
+                }
+            )
+
+    if pe_features:
+        result["PE_MiningHead"] = {}
+        for ii, feature in enumerate(pe_features):
+            result["PE_MiningHead"].update(
+                {
+                    f"MineHead_{ii}": {
+                        "Location": {"X": feature[0], "Y": feature[1], "Z": feature[2]}
+                    }
+                }
+            )
+
+    result["Name"] = f"RMA_ICGEN_{key}{room_num}"
+    result["Bounds"] = settings["bounds"]
+    result["Tags"] = settings["tags"]
+
+    return result
 
 def build_json(
     traversal_list, circles, entrances, pillars, room_num, key, settings, pe_features

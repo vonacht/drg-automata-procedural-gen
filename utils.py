@@ -109,7 +109,6 @@ def compute_room_volume(circles) -> float:
 
 def compute_room_scale_factor(circles, scale_coeff: int, optional_size=None) -> float:
     target_max_volume = random.choice([2000, 3000, 4000]) if optional_size is None else optional_size
-    print(target_max_volume)
     target_max_volume = target_max_volume ** 3 * scale_coeff
     current_volume = compute_room_volume(circles)
     scale_factor = target_max_volume / current_volume

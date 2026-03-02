@@ -1,6 +1,6 @@
 {
-  "SMALL": {
-    "max_cube_vol": 1500,
+  "SMALL_VERTICAL": {
+    "max_cube_vol": 2000,
     "bounds": 2500,
     "inverted": false,
     "PE": false,
@@ -8,31 +8,163 @@
     "size": 20,
     "randomize_size": false,
     "tags": [
-      "Rooms.Linear.Small"
+      "Rooms.Linear.Small",
+      "Rooms.Linear.Vertical"
     ]
   },
-  "MEDIUM": {
-    "max_cube_vol": 4500,
-    "bounds": 4500,
+  "SMALL_FLAT": {
+    "max_cube_vol": 2000,
+    "bounds": 2500,
+    "inverted": false,
+    "PE": false,
+    "remove_pockets": true,
+    "size": 20,
+    "randomize_size": false,
+    "tags": [
+      "Rooms.Linear.Small",
+      "Rooms.Linear.Flat"
+    ]
+  },
+  "SMALL_SLOPE": {
+    "max_cube_vol": 2000,
+    "bounds": 2500,
+    "inverted": false,
+    "PE": false,
+    "remove_pockets": true,
+    "size": 20,
+    "randomize_size": false,
+    "tags": [
+      "Rooms.Linear.Small",
+      "Rooms.Linear.Slope"
+    ]
+  },
+  "MEDIUM_FLAT": {
+    "max_cube_vol": 2500,
+    "bounds": 3500,
     "inverted": false,
     "PE": false,
     "remove_pockets": true,
     "size": 30,
     "randomize_size": false,
     "tags": [
-      "Rooms.Linear.Medium"
+      "Rooms.Linear.Medium",
+      "Rooms.Linear.Flat"
     ]
   },
-  "BIG": {
-    "max_cube_vol": 7000,
+  "MEDIUM_VERTICAL": {
+    "max_cube_vol": 2500,
+    "bounds": 3500,
+    "inverted": false,
+    "PE": false,
+    "remove_pockets": true,
+    "size": 30,
+    "randomize_size": false,
+    "tags": [
+      "Rooms.Linear.Medium",
+      "Rooms.Linear.Vertical"
+    ]
+  },
+  "MEDIUM_SLOPE": {
+    "max_cube_vol": 2500,
+    "bounds": 3500,
+    "inverted": false,
+    "PE": false,
+    "remove_pockets": true,
+    "size": 30,
+    "randomize_size": false,
+    "tags": [
+      "Rooms.Linear.Medium",
+      "Rooms.Linear.Slope"
+    ]
+  },
+  "BIG_VERTICAL": {
+    "max_cube_vol": 3500,
+    "bounds": 4000,
+    "inverted": false,
+    "PE": false,
+    "remove_pockets": true,
+    "size": 30,
+    "randomize_size": true,
+    "tags": [
+      "Rooms.Linear.Big",
+      "Rooms.Linear.Vertical"
+    ]
+  },
+  "BIG_FLAT": {
+    "max_cube_vol": 3500,
+    "bounds": 4000,
+    "inverted": false,
+    "PE": false,
+    "remove_pockets": true,
+    "size": 30,
+    "randomize_size": true,
+    "tags": [
+      "Rooms.Linear.Big",
+      "Rooms.Linear.Flat"
+    ]
+  },
+  "BIG_SLOPE": {
+    "max_cube_vol": 3500,
+    "bounds": 4000,
+    "inverted": false,
+    "PE": false,
+    "remove_pockets": true,
+    "size": 30,
+    "randomize_size": true,
+    "tags": [
+      "Rooms.Linear.Big",
+      "Rooms.Linear.Slope"
+    ]
+  },
+  "END": {
     "bounds": 5500,
     "inverted": false,
     "PE": false,
     "remove_pockets": true,
-    "size": 45,
+    "size": 30,
     "randomize_size": false,
     "tags": [
-      "Rooms.Linear.Big"
+      "Rooms.Linear.End"
+    ]
+  },
+  "ESCORT_SMALL": {
+    "max_cube_vol": 1500,
+    "verticality": "flat",
+    "bounds": 2000,
+    "inverted": false,
+    "PE": false,
+    "remove_pockets": true,
+    "size": 15,
+    "randomize_size": false,
+    "tags": [
+      "Rooms.Linear.Small",
+      "Rooms.Linear.Vertical"
+    ]
+  },
+  "ESCORT_MEDIUM": {
+    "max_cube_vol": 1500,
+    "verticality": "flat",
+    "bounds": 2000,
+    "inverted": false,
+    "PE": false,
+    "remove_pockets": true,
+    "size": 15,
+    "randomize_size": false,
+    "tags": [
+      "Rooms.Linear.Medium",
+      "Rooms.Linear.Vertical"
+    ]
+  },
+  "BIGEGG": {
+    "max_cube_vol": 1500,
+    "bounds": 2000,
+    "inverted": false,
+    "PE": false,
+    "remove_pockets": true,
+    "size": 20,
+    "randomize_size": false,
+    "tags": [
+      "BigEgg.Linear.Small"
     ]
   },
   "PE": {
@@ -42,6 +174,7 @@
     "PE": true,
     "remove_pockets": false,
     "size": 50,
+    "double": false,
     "randomize_size": false,
     "tags": [
       "Rooms.Linear.CustomPE"
