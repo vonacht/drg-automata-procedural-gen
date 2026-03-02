@@ -271,11 +271,22 @@ def generate_doubleroom(tag, room_num, size, mixed):
     a1, a2, a3, *_ = make_one_room()
     b1, b2, b3, *_ = make_one_room()
 
+    # Decide if angled or straight down:
+    angle = random.choice(["vertical", "angle"])
+    match angle:
+        case "vertical":
+            xshift = 0
+            yshift = 0
+        case "angle":
+            xshift = random.randrange(1000, 1500)
+            yshift = random.randrange(1000, 1500)
+
+    print(angle, xshift, yshift)
     # Get coordinates of last point of first room:
     pit_center = random.choice([0, -1])
     # Modify the coordinates of the second room:
     shift_vector = np.array(a2[pit_center]["center"]) - np.array(b2[0]["center"])
-    b2 = [{"center": (c["center"][0] + shift_vector[0], c["center"][1] + shift_vector[1], c["center"][2] - random.randrange(1500, 2000)), "radius": c["radius"]} for c in b2]
+    b2 = [{"center": (c["center"][0] + shift_vector[0] + xshift, c["center"][1] + shift_vector[1] + yshift, c["center"][2] - random.randrange(1500, 2000)), "radius": c["radius"]} for c in b2]
     shaft = [{"center": a2[pit_center]["center"], "radius": a2[pit_center]["radius"]*0.7}, {"center": b2[0]["center"], "radius": b2[0]["radius"]*0.7}]
     # Append room and traversal paths:
     new_room = [a2] + [b2] + [shaft]
