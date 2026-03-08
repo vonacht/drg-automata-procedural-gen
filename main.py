@@ -237,23 +237,67 @@ def create_random_walk(M, N, steps, start=None):
 
     return grid
 
+def rotation_matrix_axis_angle(axis, theta):
+    axis = np.asarray(axis)
+    axis = axis / np.linalg.norm(axis)
+    x, y, z = axis
+    
+    c = np.cos(theta)
+    s = np.sin(theta)
+    C = 1 - c
+    
+    return np.array([
+        [c + x*x*C,     x*y*C - z*s, x*z*C + y*s],
+        [y*x*C + z*s, c + y*y*C,     y*z*C - x*s],
+        [z*x*C - y*s, z*y*C + x*s, c + z*z*C]
+    ])
+
+def rotate_spheres(spheres, center_point, rotation_matrix):
+    cx, cy, cz = center_point
+    rotated = []
+
+    intra_array = [(c["center"][0], c["center"][1], c["center"][2], c["radius"]) for c in spheres]
+    for x, y, z, r in intra_array:
+        # Translate to origin
+        point = np.array([x - cx, y - cy, z - cz])
+        
+        # Rotate
+        rotated_point = rotation_matrix @ point
+        
+        # Translate back
+        rotated_point += np.array([cx, cy, cz])
+        
+        rotated.append((*rotated_point, r))
+    
+    return [{"center": (s[0], s[1], s[2]), "radius": s[3]} for s in rotated]
+
 def run_doublerooms(mixed):
-    tags = {"small": 2000, "medium": 2000, "big": 2000}
-    for i in range(8):
+    tags = {"small": 2000, "medium": 2500, "big": 3000}
+    for i in range(25):
         for k, v in tags.items():
             generate_doubleroom(k, i, v, mixed, "dive")
+    for i in range(60):
+        for k, v in tags.items():
             generate_doubleroom(k, i, v, mixed, "overlap")
 
 def generate_doubleroom(tag, room_num, size, mixed, room_type):
     
     def make_one_room():
+        method = random.choice(["random_walk", "automaton"])
+        #print(method)
+        method = "automaton"
+        #automaton_size = random.choice([15, 22, 30])
+        automaton_size = 15
         while True:
-            tilemap = run_automata(
-                                    inverted=False,
-                                    randomize_size=False,
-                                    remove_pockets=True,
-                                    size=15,
-                                )
+            if method == "automaton":
+                tilemap = run_automata(
+                                        inverted=False,
+                                        randomize_size=False,
+                                        remove_pockets=True,
+                                        size=automaton_size,
+                                    )
+            else:
+                tilemap = create_random_walk(50, 50, 100)
             try:
                 traversal_path, scaled_circles, graph, heightmap, ca_grid, selected_circles = (
                     create_room(
@@ -261,7 +305,7 @@ def generate_doubleroom(tag, room_num, size, mixed, room_type):
                         height_scale=10,  
                         max_cube_vol=size,
                         scale_coeff=1,
-                        verticality="flat",
+                        verticality=random.choice(["flat", "up", "down", "heightmap"]),
                         cliff=False
                     )
                 )
@@ -298,32 +342,58 @@ def generate_doubleroom(tag, room_num, size, mixed, room_type):
             pillars = []
             pe = []
             name = f"RMA_ICGEN_{tag.upper()}_DOUBLEROOM{room_num}.json"
+            room_name =             f"{tag.upper()}_DOUBLEROOM"
+
         case "overlap":
             direction_vector = np.array(a2[-1]["center"]) - np.array(
                 a2[0]["center"]
             )
             perpendicular_vector = perpendicular_2d_normalized(direction_vector)
-            a_copy = [{"center": (c["center"][0] + perpendicular_vector[0] + a2[0]["radius"] * 0.7,
-                                  c["center"][1] - perpendicular_vector[1] + a2[0]["radius"] * 0.7,
-                                  c["center"][2]),
-                       "radius": c["radius"],
-                       "floor_depth": -random.randrange(500, 1000)} for c in a2]
-            new_room = [a2] + [a_copy]
-            traversal_paths = [a1] + [a1]
-            # Entrances:
-            first_entrances = [b for b in generate_entrances(a2, a3) if b[-1] == "Entrance"]
-            second_entrances = [b for b in generate_entrances(a_copy, a3) if b[-1] == "Exit"]
+            depth_method = random.choices(["depth", "shift"], k=1, weights=[0.3, 0.7])[0]
+            print(depth_method)
+            if depth_method == "depth":
+                a_copy = [{"center": (c["center"][0] + perpendicular_vector[0] + a2[0]["radius"] * random.uniform(0.7, 1.2),
+                                      c["center"][1] - perpendicular_vector[1] + a2[0]["radius"] * random.uniform(0.7, 1.2),
+                                      c["center"][2]),
+                           "radius": c["radius"],
+                           "floor_depth": -random.randrange(500, 1500)} for c in a2]
+                new_room = [a2] + [a_copy]
+                traversal_paths = [a1] + [a1]
+                # Entrances:
+                print(b3)
+                first_entrances = [b for b in generate_entrances(a2, a3) if b[-1] == "Entrance"]
+                second_entrances = [b for b in generate_entrances(a_copy, a3) if b[-1] == "Exit"]
+            else:
+                axis = (0,0,0)
+                while axis == (0,0,0):
+                    axis = (random.choice([0, 1]), random.choice([0, 1]), random.choice([0, 1]))
+                theta = np.radians(random.uniform(50, 120))
+                R = rotation_matrix_axis_angle(axis, theta)
+                center_of_rotation = direction_vector/2
+                a_copy = rotate_spheres(b2, center_of_rotation, R)
+                new_room = [a2] + [a_copy]
+                traversal_paths = [a1] + [b1]
+                # Entrances:
+                first_entrances = [b for b in generate_entrances(a2, a3) if b[-1] == "Entrance"]
+                second_entrances = [b for b in generate_entrances(a_copy, b3) if b[-1] == "Exit"]
             pillars = []
             pe = []
             name = f"RMA_ICGEN_{tag.upper()}_OVERLAPROOM{room_num}.json"
+            room_name =             f"{tag.upper()}_OVERLAPROOM"
     if not mixed:
         tags = {"small": ["Rooms.Linear.CustomSmall"],
                 "medium": ["Rooms.Linear.CustomMedium"],
                 "big": ["Rooms.Linear.CustomBig"]}
     else:
-        tags = {"small": ["Rooms.Linear.Small"],
-                "medium": ["Rooms.Linear.Medium"],
-                "big": ["Rooms.Linear.Big"]}
+        tags = random.choice([{"small": ["Rooms.Linear.Small", "Rooms.Linear.Flat"],
+                "medium": ["Rooms.Linear.Medium", "Rooms.Linear.Flat"],
+                "big": ["Rooms.Linear.Big", "Rooms.Linear.Flat"]},
+                {"small": ["Rooms.Linear.Small", "Rooms.Linear.Vertical"],
+                "medium": ["Rooms.Linear.Medium", "Rooms.Linear.Vertical"],
+                "big": ["Rooms.Linear.Big", "Rooms.Linear.Vertical"]},
+                {"small": ["Rooms.Linear.Small", "Rooms.Linear.Slope"],
+                "medium": ["Rooms.Linear.Medium", "Rooms.Linear.Slope"],
+                "big": ["Rooms.Linear.Big", "Rooms.Linear.Slope"]}])
     # Create the room:
     room_json = build_json_multiple_ffill(
             traversal_paths,
@@ -331,8 +401,8 @@ def generate_doubleroom(tag, room_num, size, mixed, room_type):
             first_entrances + second_entrances,
             pillars,
             room_num,
-            f"{tag.upper()}_DOUBLEROOM",
-            {"bounds": 2000, "tags": tags[tag]},
+            room_name,
+            {"bounds": size+800, "tags": tags[tag]},
             pe
             )
 
@@ -359,8 +429,8 @@ def perpendicular_2d_normalized(v):
 def generate_tunnel_rooms(mixed):
     tunnels = {"L": [(0,0,0), (0,1,0), (1,1,0)],
                "U": [(0,0,0), (0,1,0), (1,1,0), (1,0,0)],
-               "arcR": [(0,0,0), (0, 3.5, 0)],
-               "arcL": [(0,0,0), (0, 3.5, 0)]}
+               "arcR": [(0,0,0), (0, 1.5, 0)],
+               "arcL": [(0,0,0), (0, 1.5, 0)]}
     sizes = {"small": 2500, "medium": 2500, "big": 4000}
     for tunnel, verticality, size in product(tunnels, ["up", "down", "flat"], sizes):
         generate_tunnel_room(tunnel, tunnels[tunnel], verticality, size, sizes[size], mixed)
@@ -370,9 +440,9 @@ def generate_tunnel_room(tunnel_type, tunnel_base, verticality, size_tag, size, 
         case "L" | "U":
             base = tunnel_base
         case "arcL": 
-            base = sample_quadratic_bezier(tunnel_base[0], (5, 1.5, 0), tunnel_base[1], num_points=10)
+            base = sample_quadratic_bezier(tunnel_base[0], (2, 0.75, 0), tunnel_base[1], num_points=10)
         case "arcR": 
-            base = sample_quadratic_bezier(tunnel_base[0], (-5, 1.5, 0), tunnel_base[1], num_points=10)
+            base = sample_quadratic_bezier(tunnel_base[0], (-2, 0.75, 0), tunnel_base[1], num_points=10)
 
     match verticality:
         case "flat":
@@ -382,13 +452,13 @@ def generate_tunnel_room(tunnel_type, tunnel_base, verticality, size_tag, size, 
             if tunnel_type == "U":
                 base = [{"center": (b[0], b[1], ii/2.5), "radius": 0.4} for ii, b in enumerate(base)]
             else:
-                base = [{"center": (b[0], b[1], b[1]), "radius": 0.4} for b in base]
+                base = [{"center": (b[0], b[1], b[1]*0.8), "radius": 0.4} for b in base]
             number = 1
         case "down":
             if tunnel_type == "U":
                 base = [{"center": (b[0], b[1], -ii/2.5), "radius": 0.4} for ii, b in enumerate(base)]
             else:
-                base = [{"center": (b[0], b[1], -b[1]), "radius": 0.4} for b in base]
+                base = [{"center": (b[0], b[1], -b[1]*0.8), "radius": 0.4} for b in base]
             number = 2
     scale_factor = compute_room_scale_factor(base, 1, optional_size=size)
     scaled_spheres = scale_spheres(base, scale_factor)
