@@ -9,6 +9,7 @@ from skimage.morphology import skeletonize
 from scipy.ndimage import distance_transform_edt
 from pathlib import Path
 from itertools import product
+from more_itertools import flatten
 
 from automata import CellularAutomaton
 
@@ -18,6 +19,7 @@ from utils import (
     scale_spheres,
     build_graph,
     greedy_dfs_min_backtrack,
+    scale_spheres_multiple_ffill,
 )
 from json_builder import (
     generate_entrances,
@@ -106,7 +108,8 @@ def create_room(
     max_cube_vol=1500,
     scale_coeff=1,
     verticality=None,
-    cliff=None
+    cliff=None,
+    pe=False
 ):
     
     match verticality:
@@ -149,7 +152,7 @@ def create_room(
             selected_circles.append((x, y, r))
 
     # We skip empty rooms and rooms with 1 circle (they are too simple even for the small rooms):
-    if len(selected_circles) <= 1:
+    if len(selected_circles) <= 1 and not pe:
         raise RoomTooSmall
 
     if verticality in ["up", "down"]:
@@ -178,9 +181,13 @@ def create_room(
     # We scale the room based on the max_cube_vol value in the settings:
     scale_factor = compute_room_scale_factor(spheres, optional_size=max_cube_vol, scale_coeff=scale_coeff)
     scaled_spheres = scale_spheres(spheres, scale_factor, center_point=center_point)
-    for sphere in scaled_spheres:
-        if sphere["radius"] < 300:
-            raise RoomTooSmall
+    """
+    if not pe:
+        for sphere in scaled_spheres:
+            if sphere["radius"] < 300:
+                raise RoomTooSmall
+    """
+    scaled_spheres = [{"center": s["center"], "radius": 500} if s["radius"] <= 300 else s for s in scaled_spheres]
     # We create an adjacency graph of all the circles:
     graph = build_graph(scaled_spheres)
     # And we get the traversal path to be able to create our FloodFillLines:
@@ -196,6 +203,75 @@ def cliff_factor(ii, num_circles, verticality):
         case "down":
             result = -2 if ii > num_circles else 0 
     return result
+
+def upscale2x(arr):
+    """
+    Upscale a 2D numpy array by 2x using nearest-neighbor (pixel doubling).
+    """
+    return np.repeat(np.repeat(arr, 2, axis=0), 2, axis=1)
+
+def create_DLA_tilemap(M, N, target_fill, stick_prob, max_steps=10000):
+    """
+    Perform Diffusion-Limited Aggregation (DLA) on an MxN grid.
+
+    Parameters:
+        M, N (int): Grid size
+        target_fill (float): Fraction of grid to fill (0 < target_fill <= 1)
+        max_steps (int): Max steps per particle to avoid infinite wandering
+
+    Returns:
+        grid (np.ndarray): MxN array with 1s as occupied cells
+    """
+
+    grid = np.zeros((M, N), dtype=np.int8)
+
+    # Start with a seed in the center
+    center = (M // 2, N // 2)
+    grid[center] = 1
+
+    occupied_count = 1
+    target_count = int(M * N * target_fill)
+
+    # Neighbor directions (4-connectivity)
+    directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]
+
+    def is_adjacent_to_cluster(x, y):
+        for dx, dy in directions:
+            nx, ny = x + dx, y + dy
+            if 0 <= nx < M and 0 <= ny < N:
+                if grid[nx, ny] == 1:
+                    return True
+        return False
+
+    while occupied_count < target_count:
+
+        # Spawn walker at random boundary
+        x, y = random.choice([
+            (0, random.randrange(N)),
+            (M - 1, random.randrange(N)),
+            (random.randrange(M), 0),
+            (random.randrange(M), N - 1)
+        ])
+
+        for _ in range(max_steps):
+            # Random walk step
+            dx, dy = random.choice(directions)
+            x += dx
+            y += dy
+
+            # Keep inside bounds
+            if x <= 0 or x >= M - 1 or y <= 0 or y >= N - 1:
+                break  # discard walker if it escapes
+
+            # Stick if adjacent to cluster
+            if is_adjacent_to_cluster(x, y):
+                if random.random() < stick_prob:
+                    if grid[x, y] == 0:
+                        grid[x, y] = 1
+                        occupied_count += 1
+                    break
+
+    return upscale2x(grid)
 
 def create_random_walk(M, N, steps, start=None):
     """
@@ -271,6 +347,112 @@ def rotate_spheres(spheres, center_point, rotation_matrix):
     
     return [{"center": (s[0], s[1], s[2]), "radius": s[3]} for s in rotated]
 
+
+def compute_side_tunnel(c1, c2, type):
+    direction_vector = (np.array(c2["center"]) - np.array(c1["center"])) / 2
+    mid_point = direction_vector + np.array(c1["center"])
+    match type:
+        case "-":
+            perpendicular_vector = (-direction_vector[1], direction_vector[0], 0)
+        case "+":
+            perpendicular_vector = (direction_vector[1], -direction_vector[0], 0)
+    return mid_point + perpendicular_vector
+
+def sample_helix(radius, height, turns=1, n_points=100):
+    """
+    Sample points along a 3D helix.
+
+    Args:
+        radius (float): radius of the helix
+        height (float): total height of the helix
+        turns (float): number of full rotations
+        n_points (int): number of sample points
+
+    Returns:
+        list of (x, y, z) tuples
+    """
+    points = []
+    max_t = 2 * math.pi * turns
+
+    for i in range(n_points):
+        t = max_t * i / (n_points - 1)
+        x = radius * math.cos(t)
+        y = radius * math.sin(t)
+        z = height * (t / max_t)
+        points.append((x, y, z))
+
+    return points
+
+def run_pitrooms(mixed):
+    tags = {"small": 4000, "medium": 4000, "big": 4000}
+    for i in range(5):
+        for k, v in tags.items():
+            generate_pitroom(k, i, v, mixed)
+
+def generate_pitroom(tag, room_num, size, mixed):
+
+    direction = random.choice([-1])
+    radius = random.randrange(800, 1200)
+    height = size + random.uniform(-1000, 1000)
+    turns = {"small": 3, "medium": 4, "big": 6}
+    main_helix = sample_helix(radius*1.2, direction * height, turns[tag], 40)
+    main_helix = [{"center": h, "radius": 450} for h in main_helix]
+    main_shaft = [{"center": (0,0,0), "radius": radius * 1.4}, 
+        {"center": (0,0,0), "radius": radius}, 
+        {"center": (0, 0, direction * height), "radius": radius},
+        {"center": (0,0, direction * height), "radius": radius * 1.4}
+    ]
+    new_room = [main_helix] + [main_shaft]
+    traversal_paths = [list(range(len(main_helix)))] + [[0,1, 2, 3]]
+    first_point = main_shaft[0]
+    second_point = main_shaft[-1]
+    # Entrances:
+    first_entrances= [(
+            first_point["center"][0], first_point["center"][1] - first_point["radius"], first_point["center"][2] + 250,
+            0, 0, -90, "Entrance"
+            )]
+    second_entrances= [(
+            second_point["center"][0], second_point["center"][1] + second_point["radius"], second_point["center"][2] + 250,
+            0, 0, 90, "Exit"
+            )]
+    pillars = []
+    pe = []
+    name = f"RMA_ICGEN_{tag.upper()}_PITROOM{room_num}.json"
+    room_name =             f"{tag.upper()}_PITROOM"
+    if not mixed:
+        tags = {"small": ["Rooms.Linear.CustomSmall"],
+                "medium": ["Rooms.Linear.CustomMedium"],
+                "big": ["Rooms.Linear.CustomBig"]}
+    else:
+        tags = random.choice([{"small": ["Rooms.Linear.Small", "Rooms.Linear.Flat"],
+                "medium": ["Rooms.Linear.Medium", "Rooms.Linear.Flat"],
+                "big": ["Rooms.Linear.Big", "Rooms.Linear.Flat"]},
+                {"small": ["Rooms.Linear.Small", "Rooms.Linear.Vertical"],
+                "medium": ["Rooms.Linear.Medium", "Rooms.Linear.Vertical"],
+                "big": ["Rooms.Linear.Big", "Rooms.Linear.Vertical"]},
+                {"small": ["Rooms.Linear.Small", "Rooms.Linear.Slope"],
+                "medium": ["Rooms.Linear.Medium", "Rooms.Linear.Slope"],
+                "big": ["Rooms.Linear.Big", "Rooms.Linear.Slope"]}])
+    room_json = build_json_multiple_ffill(
+            traversal_paths,
+            new_room,
+            first_entrances + second_entrances,
+            pillars,
+            room_num,
+            room_name,
+            {"bounds": size+800, "tags": tags[tag]},
+            pe
+            )
+    try:
+        path = Path("generated")
+        path.mkdir(parents=True, exist_ok=True)
+        with open(f"generated/{name}", "w") as f:
+            json.dump(room_json, f, indent=4)
+        logging.info(f"Written {name} to generated/{name}, method: pitroom")
+    except Exception as e:
+        logging.error(f"Couldn't write {name}: {e}")
+
+
 def run_doublerooms(mixed):
     tags = {"small": 2000, "medium": 2500, "big": 3000}
     for i in range(25):
@@ -279,6 +461,9 @@ def run_doublerooms(mixed):
     for i in range(60):
         for k, v in tags.items():
             generate_doubleroom(k, i, v, mixed, "overlap")
+    for i in range(25):
+        for k, v in tags.items():
+            generate_doubleroom(k, i, v, mixed, "side")
 
 def generate_doubleroom(tag, room_num, size, mixed, room_type):
     
@@ -360,7 +545,6 @@ def generate_doubleroom(tag, room_num, size, mixed, room_type):
                 new_room = [a2] + [a_copy]
                 traversal_paths = [a1] + [a1]
                 # Entrances:
-                print(b3)
                 first_entrances = [b for b in generate_entrances(a2, a3) if b[-1] == "Entrance"]
                 second_entrances = [b for b in generate_entrances(a_copy, a3) if b[-1] == "Exit"]
             else:
@@ -380,6 +564,57 @@ def generate_doubleroom(tag, room_num, size, mixed, room_type):
             pe = []
             name = f"RMA_ICGEN_{tag.upper()}_OVERLAPROOM{room_num}.json"
             room_name =             f"{tag.upper()}_OVERLAPROOM"
+        case "side":
+            direction = random.choice(["-y", "y", "x"])
+            direction = "x"
+            match direction:
+                case "-y":
+                    shift = min([c["center"][1] - c["radius"] for c in a2]) - random.randrange(1500, 2000)
+                case "y":
+                    shift = max([c["center"][1] + c["radius"] for c in a2]) + random.randrange(1500, 2000)
+                case "x":
+                    shift = max([c["center"][0] + c["radius"] for c in a2]) + random.randrange(1500, 2000)
+            b2 = [{"center": (c["center"][0] + shift, c["center"][1] + shift, c["center"][2] + random.randrange(-1200, 1200)), "radius": c["radius"]} for c in b2]
+            match direction:
+                case "-y" | "y":
+                    min_first_circle = min(a2, key=lambda x: x["center"][1] - x["radius"])
+                    max_first_circle = max(a2, key=lambda x: x["center"][1] + x["radius"])
+                    min_second_circle = min(b2, key=lambda x: x["center"][1] - x["radius"])
+                    max_second_circle = max(b2, key=lambda x: x["center"][1] + x["radius"])
+                case "x": 
+                    min_first_circle = min(a2, key=lambda x: x["center"][0] - x["radius"])
+                    max_first_circle = max(a2, key=lambda x: x["center"][0] + x["radius"])
+                    min_second_circle = min(b2, key=lambda x: x["center"][0] - x["radius"])
+                    max_second_circle = max(b2, key=lambda x: x["center"][0] + x["radius"])
+            tunnel_middle_room_c1 = compute_side_tunnel(min_first_circle, min_second_circle, "-")
+            tunnel_middle_room_c2 = compute_side_tunnel(max_first_circle, max_second_circle, "+")
+            c1 = [min_first_circle, {"center": tunnel_middle_room_c1, "radius": 450}, min_second_circle]
+            c1 = sample_quadratic_bezier(*[c["center"] for c in c1], num_points=10)
+            c1 = [{"center": p, "radius": 450} for p in c1]
+            c2 = [max_first_circle, {"center": tunnel_middle_room_c2, "radius": 450}, max_second_circle]
+            c2 = sample_quadratic_bezier(*[c["center"] for c in c2], num_points=10)
+            c2 = [{"center": p, "radius": 450} for p in c2]
+            new_room = [a2] + [b2] + [c1] + [c2]
+            traversal_paths = [a1] + [b1] + [list(range(len(c1)))] + [list(range(len(c2)))]
+            # Entrances:
+            #first_entrances = [b for b in generate_entrances(a2, a3) if b[-1] == "Entrance"]
+            #second_entrances = [b for b in generate_entrances(b2, b3) if b[-1] == "Exit"]
+            first_point = min(a2, key=lambda x: x["center"][1] - x["radius"])
+            second_point = max(b2, key=lambda x: x["center"][1] + x["radius"])
+            first_entrances= [(
+                    first_point["center"][0], first_point["center"][1] - first_point["radius"], first_point["center"][2],
+                    0, 0, -90, "Entrance"
+                    )]
+            second_entrances= [(
+                    second_point["center"][0], second_point["center"][1] + second_point["radius"], second_point["center"][2],
+                    0, 0, 90, "Exit"
+                    )]
+            pillars = []
+            pe = []
+            name = f"RMA_ICGEN_{tag.upper()}_SIDEROOM{room_num}.json"
+            room_name =             f"{tag.upper()}_SIDEROOM"
+            
+                
     if not mixed:
         tags = {"small": ["Rooms.Linear.CustomSmall"],
                 "medium": ["Rooms.Linear.CustomMedium"],
@@ -425,6 +660,86 @@ def perpendicular_2d_normalized(v):
         raise ValueError("Zero vector has no defined perpendicular direction")
     
     return (px / magnitude, py / magnitude)
+
+def generate_lindenmayer_base():
+    base = [[(0, i)] for i in range(random.randrange(3, 5))]
+    for _ in range(random.randrange(5, 8)):
+        node = random.randrange(len(base))
+        angle = random.choice([180, 135, 45, 0])
+        new_node = (0, 0)
+        match angle:
+            case 180:
+                new_node = (base[node][-1][0] - 1, base[node][-1][1])
+            case 135:
+                new_node = (base[node][-1][0] - 1, base[node][-1][1] + 1)
+            case 90:
+                new_node = (base[node][-1][0], base[node][-1][1] + 1)
+            case 45:
+                new_node = (base[node][-1][0] + 1, base[node][-1][1] + 1)
+            case 0:
+                new_node = (base[node][-1][0] + 1, base[node][-1][1])
+        base[node].append(new_node)
+    base.append([(0, i) for i in range(len(base))])
+    return base
+
+def generate_l_rooms(mixed):
+    
+    for size, size_tag in [(3000, "small"), (3000, "medium"), (3000, "big")]:
+        for i in range(16):
+            l_base = generate_lindenmayer_base()
+            base = [[{"center": (c[0], c[1], 0), "radius": 0.4, "height": 1000} for c in b] for b in l_base]
+            scale_factor = compute_room_scale_factor(list(flatten(base)), 1, optional_size=size)
+            scaled_spheres = scale_spheres_multiple_ffill(base, scale_factor)
+            scaled_spheres = [[{"center": c["center"], "radius": c["radius"], "height": 850} for c in b] for b in scaled_spheres]
+            pit_index = random.randrange(1, len(scaled_spheres[-1]))
+            scaled_spheres[-1][pit_index]["floor_depth"] = -500
+            first_point, last_point = scaled_spheres[0][0], scaled_spheres[-1][-1]
+            entrance = (
+                    first_point["center"][0], first_point["center"][1] - first_point["radius"], first_point["center"][2],
+                    0, 0, -90, "Entrance"
+                    )
+            exit = (
+                    last_point["center"][0], last_point["center"][1] + last_point["radius"], last_point["center"][2],
+                    0, 0, 90, "Exit"
+                    )
+            pillars = flatten([generate_pillars(p) for p in scaled_spheres])
+            pe_features = []
+            if not mixed:
+                tags = {"small": ["Rooms.Linear.CustomSmall"],
+                        "medium": ["Rooms.Linear.CustomMedium"],
+                        "big": ["Rooms.Linear.CustomBig"]}
+            else:
+                tags = random.choice([{"small": ["Rooms.Linear.Small", "Rooms.Linear.Flat"],
+                        "medium": ["Rooms.Linear.Medium", "Rooms.Linear.Flat"],
+                        "big": ["Rooms.Linear.Big", "Rooms.Linear.Flat"]},
+                        {"small": ["Rooms.Linear.Small", "Rooms.Linear.Vertical"],
+                        "medium": ["Rooms.Linear.Medium", "Rooms.Linear.Vertical"],
+                        "big": ["Rooms.Linear.Big", "Rooms.Linear.Vertical"]},
+                        {"small": ["Rooms.Linear.Small", "Rooms.Linear.Slope"],
+                        "medium": ["Rooms.Linear.Medium", "Rooms.Linear.Slope"],
+                        "big": ["Rooms.Linear.Big", "Rooms.Linear.Slope"]}])
+            room_json = build_json_multiple_ffill(
+                [[i for i in range(len(a))] for a in scaled_spheres],
+                scaled_spheres,
+                [entrance, exit],
+                pillars,
+                i,
+                f"{size_tag.upper()}_LINDEN",
+                {"bounds": size, "tags": tags[size_tag]},
+                pe_features,
+            )
+            
+            name = f"RMA_ICGEN_{size_tag.upper()}_LINDEN{i}.json"
+
+            try:
+                path = Path("generated")
+                path.mkdir(parents=True, exist_ok=True)
+                with open(f"generated/{name}", "w") as f:
+                    json.dump(room_json, f, indent=4)
+                logging.info(f"Written {name} to generated/{name}, method: linden")
+            except Exception as e:
+                logging.error(f"Couldn't write {name}: {e}")
+
 
 def generate_tunnel_rooms(mixed):
     tunnels = {"L": [(0,0,0), (0,1,0), (1,1,0)],
@@ -478,9 +793,15 @@ def generate_tunnel_room(tunnel_type, tunnel_base, verticality, size_tag, size, 
                 "medium": ["Rooms.Linear.CustomMedium"],
                 "big": ["Rooms.Linear.CustomBig"]}
     else:
-        tags = {"small": ["Rooms.Linear.Small"],
-                "medium": ["Rooms.Linear.Medium"],
-                "big": ["Rooms.Linear.Big"]}
+        tags = random.choice([{"small": ["Rooms.Linear.Small", "Rooms.Linear.Flat"],
+                "medium": ["Rooms.Linear.Medium", "Rooms.Linear.Flat"],
+                "big": ["Rooms.Linear.Big", "Rooms.Linear.Flat"]},
+                {"small": ["Rooms.Linear.Small", "Rooms.Linear.Vertical"],
+                "medium": ["Rooms.Linear.Medium", "Rooms.Linear.Vertical"],
+                "big": ["Rooms.Linear.Big", "Rooms.Linear.Vertical"]},
+                {"small": ["Rooms.Linear.Small", "Rooms.Linear.Slope"],
+                "medium": ["Rooms.Linear.Medium", "Rooms.Linear.Slope"],
+                "big": ["Rooms.Linear.Big", "Rooms.Linear.Slope"]}])
     room_json = build_json(
         list(range(len(scaled_spheres))),
         scaled_spheres,
@@ -576,6 +897,18 @@ def main():
         action="store_true",
         help="Mixed tags for the mixed mod.",
     )
+    parser.add_argument(
+        "-l",
+        "--linden",
+        action="store_true",
+        help="Lindenmayer rooms",
+    )
+    parser.add_argument(
+        "-p",
+        "--pitrooms",
+        action="store_true",
+        help="Pit rooms",
+    )
 
     parser.add_argument(
         "-n",
@@ -602,6 +935,14 @@ def main():
         run_doublerooms(args.mixed)
         return 0
 
+    if args.linden:
+        generate_l_rooms(args.mixed)
+        return 0
+    
+    if args.pitrooms:
+        run_pitrooms(args.mixed)
+        return 0
+
     try:
         with open(args.config_path, "r") as f:
             user_settings = json.load(f)
@@ -621,11 +962,12 @@ def main():
             name = f"RMA_ICGEN_{tag}{rooms_count[tag]+args.starting_number}.json"
             # Create tilemap:
             tilemap_method = random.choice(["automaton", "random_walk"])
+            tilemap_method = "DLA"
             verticality = user_settings[tag].get("verticality", random.choice(["up", "down", "flat", "heightmap"]))
             cliff = random.choice([True, False])
-            #tilemap_method = "random_walk"
             tries = 1
-            while True:
+            if user_settings[tag]["PE"]:
+                tilemap_method = random.choice(["automaton", "DLA"])
                 match tilemap_method:
                     case "automaton":
                         tilemap = run_automata(
@@ -636,26 +978,55 @@ def main():
                         )
                         scale_coeff = 1
                     case "random_walk":
-                        tilemap = create_random_walk(50, 50, 100)
+                        tilemap = create_random_walk(100, 100, 500)
                         scale_coeff = 1
-                    case _:
-                        tilemap = create_random_walk(50, 50, 100)
-                        scale_coeff = 1
-                try:
-                    traversal_path, scaled_circles, graph, heightmap, ca_grid, selected_circles = (
-                        create_room(
-                            tilemap,
-                            height_scale=10,  
-                            max_cube_vol=user_settings[tag].get("max_cube_vol"),
-                            scale_coeff=scale_coeff,
-                            verticality=verticality,
-                            cliff=cliff
-                        )
+                    case "DLA":
+                        tilemap = create_DLA_tilemap(20, 20, 0.05, 0.4)
+                        scale_coeff = 1.2
+                traversal_path, scaled_circles, graph, heightmap, ca_grid, selected_circles = (
+                    create_room(
+                        tilemap,
+                        height_scale=10,  
+                        max_cube_vol=user_settings[tag].get("max_cube_vol"),
+                        scale_coeff=scale_coeff,
+                        verticality=verticality,
+                        cliff=cliff,
+                        pe=True
                     )
-                    break
-                except RoomTooSmall:
-                    tries += 1
-                    continue
+                )
+            else:
+                while True:
+                    match tilemap_method:
+                        case "automaton":
+                            tilemap = run_automata(
+                                inverted=user_settings[tag]["inverted"],
+                                randomize_size=user_settings[tag]["randomize_size"],
+                                remove_pockets=user_settings[tag]["remove_pockets"],
+                                size=user_settings[tag]["size"],
+                            )
+                            scale_coeff = 1
+                        case "random_walk":
+                            tilemap = create_random_walk(20, 20, 100)
+                            scale_coeff = 1
+                        case "DLA":
+                            #tilemap = create_DLA_tilemap(20, 20, random.uniform(0.1, 0.2), random.uniform(0.1, 0.5))
+                            tilemap = create_DLA_tilemap(20, 20, 0.05, 0.4)
+                            scale_coeff = 1.2
+                    try:
+                        traversal_path, scaled_circles, graph, heightmap, ca_grid, selected_circles = (
+                            create_room(
+                                tilemap,
+                                height_scale=10,  
+                                max_cube_vol=user_settings[tag].get("max_cube_vol"),
+                                scale_coeff=scale_coeff,
+                                verticality=verticality,
+                                cliff=cliff
+                            )
+                        )
+                        break
+                    except RoomTooSmall:
+                        tries += 1
+                        continue
 
             if args.debug:
                 path = Path("generated") / "debug"
@@ -672,7 +1043,10 @@ def main():
                 plt.savefig(f"{path}/circles_{name}.png")
 
             # Build the JSON:
-            pillars = generate_pillars(scaled_circles)
+            if tilemap_method != "DLA":
+                pillars = generate_pillars(scaled_circles)
+            else:
+                pillars = []
             #pillars = []
             entrances = generate_entrances(scaled_circles, graph)
             if user_settings[tag]["PE"]:

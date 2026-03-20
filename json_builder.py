@@ -84,15 +84,20 @@ def most_free_angle(main_circle, surrounding_circles):
 def generate_PE_features(circles):
     # For PE we choose a few circles at random and put the minehead there.
     number_of_mineheads = random.randrange(1, 4) if len(circles) > 4 else 1
-    chosen_circles = random.choices(range(len(circles)), k=number_of_mineheads)
+    #chosen_circles = random.choices(range(len(circles)), k=number_of_mineheads)
+    chosen_circles = sorted(circles, key=lambda x: x["radius"])[:number_of_mineheads]
     return [
         (
-            circles[circle]["center"][0],
-            circles[circle]["center"][1],
-            circles[circle]["center"][2] + 200,
+            circle["center"][0],
+            circle["center"][1],
+            circle["center"][2] + 200,
         )
         for circle in chosen_circles
     ]
+
+def top_n_indices(arr, n):
+    arr = np.asarray(arr)
+    return np.argpartition(arr, -n)[-n:]
 
 
 def generate_entrances(circles, graph):
@@ -103,7 +108,9 @@ def generate_entrances(circles, graph):
         k for k in graph if len(graph[k]) == 1 and k != 0 and 0 not in graph[k]
     ]
     if not circles_w_one_neighbor:
-        spheres_w_exit = [random.randrange(1, len(circles))]
+        # spheres_w_exit = [random.randrange(1, len(circles))]
+        coords_y = [c["center"][1] for c in circles]
+        spheres_w_exit = [np.argmax(coords_y), np.argmin(coords_y)]
     else:
         spheres_w_exit = circles_w_one_neighbor + [x for x in random.choices(range(len(circles)), k=random.randrange(1, 3)) if x not in circles_w_one_neighbor and x != 0 and 0 not in graph[x]]
 
@@ -151,52 +158,66 @@ def generate_pillars(circles):
     Here we generate some random pillars, not too many, just for added decoration.
     """
     pillars = []
-    circles_w_pillars = random.randrange(len(circles) // 2)
-    for c in random.choices(circles, k=circles_w_pillars):
-        if c["radius"] < 400:
-            continue
-        x = c["center"][0] 
-        y = c["center"][1]
-        pillars.append(
-            {
-                "Location_1": (
-                    x,
-                    y,
-                    c["center"][2] - c["radius"] * 0.3,
-                ),
-                "Location_2": (
-                    x,
-                    y,
-                    c["center"][2] + c["radius"] * 1.3,
-                ),
-                "Range": random.randrange(150, 200),
-                "NoiseRange": random.randrange(100, 150)
-            }
-        )
+    if len(circles) > 3:
+        circles_w_pillars = random.randrange(len(circles) // 3)
+        for c in random.choices(circles, k=circles_w_pillars):
+            if c["radius"] < 400:
+                continue
+            x = c["center"][0] 
+            y = c["center"][1]
+            pillars.append(
+                {
+                    "Location_1": (
+                        x,
+                        y,
+                        c["center"][2] - c["radius"] * 0.3,
+                    ),
+                    "Location_2": (
+                        x,
+                        y,
+                        c["center"][2] + c["radius"] * 1.3,
+                    ),
+                    "Range": random.randrange(150, 200),
+                    "NoiseRange": random.randrange(100, 150)
+                }
+            )
     return pillars
 
 def build_json_multiple_ffill(
     traversal_list, circles, entrances, pillars, room_num, key, settings, pe_features
 ) -> dict:
-
     result = {"FloodFillLines": {}}
     for jj, (ffill, traversal) in enumerate(zip(circles, traversal_list)):
         lines = {"Points": []}
         for ii in traversal:
             circle = ffill[ii]
-            lines["Points"].append(
-                {
-                    "Location": {
-                        "X": circle["center"][0],
-                        "Y": circle["center"][1],
-                        "Z": circle["center"][2],
-                    },
-                    "HRange": circle["radius"],
-                    "VRange": circle["radius"],
-                    "CeilingHeight": circle.get("height", circle["radius"]),
-                    "FloorDepth": circle.get("floor_depth", 0)
-                }
-            )
+            if circle.get("floor_depth"):
+                lines["Points"].append(
+                    {
+                        "Location": {
+                            "X": circle["center"][0],
+                            "Y": circle["center"][1],
+                            "Z": circle["center"][2],
+                        },
+                        "HRange": circle["radius"],
+                        "VRange": circle.get("height", circle["radius"]),
+                        "CeilingHeight": circle.get("height", circle["radius"]),
+                        "FloorDepth": circle.get("floor_depth", 0)
+                    }
+                )
+            else:
+                lines["Points"].append(
+                    {
+                        "Location": {
+                            "X": circle["center"][0],
+                            "Y": circle["center"][1],
+                            "Z": circle["center"][2],
+                        },
+                        "HRange": circle["radius"],
+                        "VRange": circle.get("height", circle["radius"]),
+                        "CeilingHeight": circle.get("height", circle["radius"])
+                    }
+                )
         result["FloodFillLines"][f"FFill_{jj}"] = lines
 
     result["Entrances"] = {}
@@ -219,7 +240,7 @@ def build_json_multiple_ffill(
             }
         )
 
-    if pillars:
+    if list(pillars):
         result["FloodFillPillars"] = {}
         for ii, p in enumerate(pillars):
             result["FloodFillPillars"].update(

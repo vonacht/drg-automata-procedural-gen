@@ -35,6 +35,55 @@
       "Rooms.Linear.CustomBig"
     ]
   },
+  "SMALL_DLA": {
+    "max_cube_vol": 4000,
+    "bounds": 4500,
+    "inverted": false,
+    "PE": false,
+    "remove_pockets": true,
+    "size": 20,
+    "randomize_size": false,
+    "tags": [
+      "Rooms.Linear.CustomSmall"
+    ]
+  },
+  "MEDIUM_DLA": {
+    "max_cube_vol": 4500,
+    "bounds": 5000,
+    "inverted": false,
+    "PE": false,
+    "remove_pockets": true,
+    "size": 30,
+    "randomize_size": false,
+    "tags": [
+      "Rooms.Linear.CustomMedium"
+    ]
+  },
+  "BIG_DLA": {
+    "max_cube_vol": 5000,
+    "bounds": 5500,
+    "inverted": false,
+    "PE": false,
+    "remove_pockets": true,
+    "size": 30,
+    "randomize_size": true,
+    "tags": [
+      "Rooms.Linear.CustomBig"
+    ]
+  },
+  "REFINERY_DLA": {
+    "max_cube_vol": 5000,
+    "verticality": "flat",
+    "bounds": 5500,
+    "inverted": false,
+    "PE": false,
+    "remove_pockets": true,
+    "size": 30,
+    "randomize_size": true,
+    "tags": [
+      "Rooms.Linear.RefineryBig"
+    ]
+  },
   "END": {
     "bounds": 5500,
     "inverted": false,
@@ -75,8 +124,8 @@
     ]
   },
   "BIGEGG": {
-    "max_cube_vol": 1500,
-    "bounds": 2000,
+    "max_cube_vol": 2000,
+    "bounds": 1500,
     "inverted": false,
     "PE": false,
     "remove_pockets": true,

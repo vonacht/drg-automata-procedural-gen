@@ -33,6 +33,39 @@ def scale_spheres(spheres, scale_factor, center_point=None):
 
     return scaled
 
+def scale_spheres_multiple_ffill(spheres, scale_factor, center_point=None):
+    """
+    Scale a list of spheres in 3D.
+
+    Parameters:
+    spheres      : list of dicts, each with 'center' (x,y,z) and 'radius'
+    scale_factor : float, how much to scale
+    center_point : optional tuple (x,y,z), the point to scale around.
+                   If None, scales around origin (0,0,0)
+
+    Returns:
+    List of scaled spheres
+    """
+    if center_point is None:
+        center_point = np.array([0.0, 0.0, 0.0])
+    else:
+        center_point = np.array(center_point)
+
+    scaled = []
+    for s in spheres:
+        scaled_1 = []
+        for l in s:
+            center = np.array(l["center"])
+            # Scale relative to center_point
+            new_center = center_point + np.array([scale_factor, scale_factor, scale_factor]) * (
+                center - center_point
+            )
+            new_radius = l["radius"] * scale_factor
+            scaled_1.append({"center": tuple(new_center), "radius": new_radius})
+        scaled.append(scaled_1)
+
+    return scaled
+
 
 # Function to check if two circles intersect or touch:
 def circles_connected(c1, c2):

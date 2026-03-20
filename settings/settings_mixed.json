@@ -168,8 +168,8 @@
     ]
   },
   "PE": {
-    "max_cube_vol": 6000,
-    "bounds": 4500,
+    "max_cube_vol": 7000,
+    "bounds": 7500,
     "inverted": true,
     "PE": true,
     "remove_pockets": false,
