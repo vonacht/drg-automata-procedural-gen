@@ -179,5 +179,41 @@
     "tags": [
       "Rooms.Linear.CustomPE"
     ]
+  },
+  "SMALL_DLA": {
+    "max_cube_vol": 2200,
+    "bounds": 4500,
+    "inverted": false,
+    "PE": false,
+    "remove_pockets": true,
+    "size": 20,
+    "randomize_size": false,
+    "tags": [
+      "Rooms.Linear.Small"
+    ]
+  },
+  "MEDIUM_DLA": {
+    "max_cube_vol": 2600,
+    "bounds": 5000,
+    "inverted": false,
+    "PE": false,
+    "remove_pockets": true,
+    "size": 30,
+    "randomize_size": false,
+    "tags": [
+      "Rooms.Linear.Medium"
+    ]
+  },
+  "BIG_DLA": {
+    "max_cube_vol": 3500,
+    "bounds": 5500,
+    "inverted": false,
+    "PE": false,
+    "remove_pockets": true,
+    "size": 30,
+    "randomize_size": true,
+    "tags": [
+      "Rooms.Linear.Big"
+    ]
   }
 }

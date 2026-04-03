@@ -2,6 +2,7 @@ import random
 import numpy as np
 import math
 
+
 def most_free_angle(main_circle, surrounding_circles):
     mx, my, mR = main_circle
     blocked_intervals = []
@@ -12,7 +13,8 @@ def most_free_angle(main_circle, surrounding_circles):
         d = math.sqrt(dx**2 + dy**2)
 
         if d == 0:
-            if sr >= mR: return None, 0, "Main circle is entirely covered."
+            if sr >= mR:
+                return None, 0, "Main circle is entirely covered."
             continue
 
         # Law of Cosines
@@ -29,7 +31,7 @@ def most_free_angle(main_circle, surrounding_circles):
         # Normalize to [0, 2pi]
         start = (phi - alpha) % (2 * math.pi)
         end = (phi + alpha) % (2 * math.pi)
-        
+
         if start > end:
             blocked_intervals.append((start, 2 * math.pi))
             blocked_intervals.append((0, end))
@@ -61,31 +63,46 @@ def most_free_angle(main_circle, surrounding_circles):
     # Find the largest gap
     max_gap = -1
     best_mid = 0
-    
+
     for i in range(len(merged)):
         next_idx = (i + 1) % len(merged)
         gap_start = merged[i][1]
         gap_end = merged[next_idx][0]
-        
+
         if next_idx == 0:
             gap_end += 2 * math.pi
-            
+
         gap_size = gap_end - gap_start
         if gap_size > max_gap:
             max_gap = gap_size
             # Calculate midpoint
             best_mid = (gap_start + gap_end) / 2
-            
+
     # Normalize midpoint back to [0, 2pi]
     best_mid = best_mid % (2 * math.pi)
 
-    return best_mid, max_gap, f"Largest gap: {math.degrees(max_gap):.1f}°. Mid-angle: {math.degrees(best_mid):.1f}°."
+    return (
+        best_mid,
+        max_gap,
+        f"Largest gap: {math.degrees(max_gap):.1f}°. Mid-angle: {math.degrees(best_mid):.1f}°.",
+    )
+
+
+def is_point_in_disk(px, py, cx, cy, r):
+    """
+    Check if point (px, py) is inside or on a disk
+    centered at (cx, cy) with radius r.
+    """
+    return (px - cx) ** 2 + (py - cy) ** 2 <= r**2
+
 
 def generate_PE_features(circles):
     # For PE we choose a few circles at random and put the minehead there.
-    number_of_mineheads = random.randrange(1, 4) if len(circles) > 4 else 1
-    #chosen_circles = random.choices(range(len(circles)), k=number_of_mineheads)
-    chosen_circles = sorted(circles, key=lambda x: x["radius"])[:number_of_mineheads]
+    number_of_mineheads = random.randrange(3, 6) if len(circles) > 4 else 1
+    # chosen_circles = random.choices(range(len(circles)), k=number_of_mineheads)
+    chosen_circles = sorted(circles, key=lambda x: x["radius"], reverse=True)[
+        :number_of_mineheads
+    ]
     return [
         (
             circle["center"][0],
@@ -93,11 +110,108 @@ def generate_PE_features(circles):
             circle["center"][2] + 200,
         )
         for circle in chosen_circles
+        if not is_point_in_disk(
+            0, 0, circle["center"][0], circle["center"][1], circle["radius"]
+        )
     ]
+
 
 def top_n_indices(arr, n):
     arr = np.asarray(arr)
     return np.argpartition(arr, -n)[-n:]
+
+
+def ray_circle_intersection(P, v, C, r):
+    """
+    P: ray origin (tuple)
+    v: ray direction (tuple, doesn't need to be normalized)
+    C: circle center (tuple)
+    r: radius (float)
+
+    Returns the smallest positive t where intersection occurs, or None.
+    """
+    px, py = P
+    vx, vy = v
+    cx, cy = C
+
+    # Vector from circle center to ray origin
+    dx = px - cx
+    dy = py - cy
+
+    # Quadratic coefficients
+    a = vx * vx + vy * vy
+    b = 2 * (vx * dx + vy * dy)
+    c = dx * dx + dy * dy - r * r
+
+    discriminant = b * b - 4 * a * c
+
+    if discriminant < 0:
+        return None  # no intersection
+
+    sqrt_disc = math.sqrt(discriminant)
+
+    t1 = (-b - sqrt_disc) / (2 * a)
+    t2 = (-b + sqrt_disc) / (2 * a)
+
+    # We only care about intersections in front of the ray
+    ts = [t for t in (t1, t2) if t >= 0]
+
+    if not ts:
+        return None
+
+    return min(ts)  # closest intersection
+
+
+def find_intersections(disks, P, v):
+    """
+    disks: list of (cx, cy, r)
+    P: ray origin
+    v: ray direction
+
+    Returns:
+        intersected_disks: list of disks that intersect
+        farthest_disk: disk with largest intersection distance
+    """
+    intersections = []
+
+    for disk in disks:
+        (cx, cy, cz), r = disk["center"], disk["radius"]
+        t = ray_circle_intersection(P, v, (cx, cy), r)
+
+        if t is not None:
+            intersections.append((disk, t))
+
+    if not intersections:
+        return [], None
+
+    # Extract disks only
+    intersected_disks = [disk for disk, _ in intersections]
+
+    # Find farthest (max t)
+    farthest_disk, max_t = max(intersections, key=lambda x: x[1])
+
+    return intersected_disks, farthest_disk
+
+
+def generate_exit_w_vector(circles, point, vector):
+    _, farthest_disk = find_intersections(circles, point, vector)
+    angle = math.asin(
+        farthest_disk["center"][1]
+        / np.sqrt(
+            farthest_disk["center"][0] ** 2 + farthest_disk["center"][1] ** 2
+        )
+    )
+    return [
+        (
+            farthest_disk["center"][0] + farthest_disk["radius"] * 0.8,
+            farthest_disk["center"][1] + farthest_disk["radius"] * 0.8,
+            farthest_disk["center"][2] + 150,
+            0,
+            0,
+            np.rad2deg(angle),
+            "Exit",
+        )
+    ]
 
 
 def generate_entrances(circles, graph):
@@ -112,7 +226,13 @@ def generate_entrances(circles, graph):
         coords_y = [c["center"][1] for c in circles]
         spheres_w_exit = [np.argmax(coords_y), np.argmin(coords_y)]
     else:
-        spheres_w_exit = circles_w_one_neighbor + [x for x in random.choices(range(len(circles)), k=random.randrange(1, 3)) if x not in circles_w_one_neighbor and x != 0 and 0 not in graph[x]]
+        spheres_w_exit = circles_w_one_neighbor + [
+            x
+            for x in random.choices(
+                range(len(circles)), k=random.randrange(1, 3)
+            )
+            if x not in circles_w_one_neighbor and x != 0 and 0 not in graph[x]
+        ]
 
     entrances = []
     for ii, t in [(spheres_w_entrance, "Entrance"), (spheres_w_exit, "Exit")]:
@@ -163,7 +283,7 @@ def generate_pillars(circles):
         for c in random.choices(circles, k=circles_w_pillars):
             if c["radius"] < 400:
                 continue
-            x = c["center"][0] 
+            x = c["center"][0]
             y = c["center"][1]
             pillars.append(
                 {
@@ -178,13 +298,21 @@ def generate_pillars(circles):
                         c["center"][2] + c["radius"] * 1.3,
                     ),
                     "Range": random.randrange(150, 200),
-                    "NoiseRange": random.randrange(100, 150)
+                    "NoiseRange": random.randrange(100, 150),
                 }
             )
     return pillars
 
+
 def build_json_multiple_ffill(
-    traversal_list, circles, entrances, pillars, room_num, key, settings, pe_features
+    traversal_list,
+    circles,
+    entrances,
+    pillars,
+    room_num,
+    key,
+    settings,
+    pe_features,
 ) -> dict:
     result = {"FloodFillLines": {}}
     for jj, (ffill, traversal) in enumerate(zip(circles, traversal_list)):
@@ -201,8 +329,10 @@ def build_json_multiple_ffill(
                         },
                         "HRange": circle["radius"],
                         "VRange": circle.get("height", circle["radius"]),
-                        "CeilingHeight": circle.get("height", circle["radius"]),
-                        "FloorDepth": circle.get("floor_depth", 0)
+                        "CeilingHeight": circle.get(
+                            "height", circle["radius"]
+                        ),
+                        "FloorDepth": circle.get("floor_depth", 0),
                     }
                 )
             else:
@@ -215,7 +345,9 @@ def build_json_multiple_ffill(
                         },
                         "HRange": circle["radius"],
                         "VRange": circle.get("height", circle["radius"]),
-                        "CeilingHeight": circle.get("height", circle["radius"])
+                        "CeilingHeight": circle.get(
+                            "height", circle["radius"]
+                        ),
                     }
                 )
         result["FloodFillLines"][f"FFill_{jj}"] = lines
@@ -240,6 +372,47 @@ def build_json_multiple_ffill(
             }
         )
 
+    # if list(pillars):
+    #     result["FloodFillPillars"] = {}
+    #     for ii, p in enumerate(pillars):
+    #         result["FloodFillPillars"].update(
+    #             {
+    #                 f"FloodFillPillar_{ii}": {
+    #                     "Points": [
+    #                         {
+    #                             "Location": {
+    #                                 "X": p["Location_1"][0],
+    #                                 "Y": p["Location_1"][1],
+    #                                 "Z": p["Location_1"][2],
+    #                             },
+    #                             "Range": {
+    #                                 "Min": p["Range"],
+    #                                 "Max": p["Range"],
+    #                             },
+    #                             "NoiseRange": {
+    #                                 "Min": p["NoiseRange"],
+    #                                 "Max": p["NoiseRange"],
+    #                             },
+    #                         },
+    #                         {
+    #                             "Location": {
+    #                                 "X": p["Location_2"][0],
+    #                                 "Y": p["Location_2"][1],
+    #                                 "Z": p["Location_2"][2],
+    #                             },
+    #                             "Range": {
+    #                                 "Min": p["Range"],
+    #                                 "Max": p["Range"],
+    #                             },
+    #                             "NoiseRange": {
+    #                                 "Min": p["NoiseRange"],
+    #                                 "Max": p["NoiseRange"],
+    #                             },
+    #                         },
+    #                     ]
+    #                 }
+    #             }
+    #         )
     if list(pillars):
         result["FloodFillPillars"] = {}
         for ii, p in enumerate(pillars):
@@ -249,36 +422,22 @@ def build_json_multiple_ffill(
                         "Points": [
                             {
                                 "Location": {
-                                    "X": p["Location_1"][0],
-                                    "Y": p["Location_1"][1],
-                                    "Z": p["Location_1"][2]
+                                    "X": z["Location"][0],
+                                    "Y": z["Location"][1],
+                                    "Z": z["Location"][2],
                                 },
                                 "Range": {
-                                    "Min": p["Range"],
-                                    "Max": p["Range"] 
+                                    "Min": z["Range"],
+                                    "Max": z["Range"],
                                 },
                                 "NoiseRange": {
-                                    "Min": p["NoiseRange"],
-                                    "Max": p["NoiseRange"]
-                                }   
-                            },
-                            {
-                                "Location": {
-                                        "X": p["Location_2"][0],
-                                        "Y": p["Location_2"][1],
-                                        "Z": p["Location_2"][2]
+                                    "Min": z["NoiseRange"],
+                                    "Max": z["NoiseRange"],
                                 },
-                                "Range": {
-                                    "Min": p["Range"],
-                                    "Max": p["Range"] 
-                                },
-                                "NoiseRange": {
-                                    "Min": p["NoiseRange"],
-                                    "Max": p["NoiseRange"]
-                                }   
                             }
+                            for z in p
                         ]
-                    }    
+                    }
                 }
             )
 
@@ -288,7 +447,11 @@ def build_json_multiple_ffill(
             result["PE_MiningHead"].update(
                 {
                     f"MineHead_{ii}": {
-                        "Location": {"X": feature[0], "Y": feature[1], "Z": feature[2]}
+                        "Location": {
+                            "X": feature[0],
+                            "Y": feature[1],
+                            "Z": feature[2],
+                        }
                     }
                 }
             )
@@ -299,8 +462,16 @@ def build_json_multiple_ffill(
 
     return result
 
+
 def build_json(
-    traversal_list, circles, entrances, pillars, room_num, key, settings, pe_features
+    traversal_list,
+    circles,
+    entrances,
+    pillars,
+    room_num,
+    key,
+    settings,
+    pe_features,
 ) -> dict:
 
     result = {"FloodFillLines": {}}
@@ -316,7 +487,7 @@ def build_json(
                 },
                 "HRange": circle["radius"],
                 "VRange": circle["radius"],
-                "CeilingHeight": circle["radius"]
+                "CeilingHeight": circle["radius"],
             }
         )
     result["FloodFillLines"]["FFill_0"] = lines
@@ -352,34 +523,34 @@ def build_json(
                                 "Location": {
                                     "X": p["Location_1"][0],
                                     "Y": p["Location_1"][1],
-                                    "Z": p["Location_1"][2]
+                                    "Z": p["Location_1"][2],
                                 },
                                 "Range": {
                                     "Min": p["Range"],
-                                    "Max": p["Range"] 
+                                    "Max": p["Range"],
                                 },
                                 "NoiseRange": {
                                     "Min": p["NoiseRange"],
-                                    "Max": p["NoiseRange"]
-                                }   
+                                    "Max": p["NoiseRange"],
+                                },
                             },
                             {
                                 "Location": {
-                                        "X": p["Location_2"][0],
-                                        "Y": p["Location_2"][1],
-                                        "Z": p["Location_2"][2]
+                                    "X": p["Location_2"][0],
+                                    "Y": p["Location_2"][1],
+                                    "Z": p["Location_2"][2],
                                 },
                                 "Range": {
                                     "Min": p["Range"],
-                                    "Max": p["Range"] 
+                                    "Max": p["Range"],
                                 },
                                 "NoiseRange": {
                                     "Min": p["NoiseRange"],
-                                    "Max": p["NoiseRange"]
-                                }   
-                            }
+                                    "Max": p["NoiseRange"],
+                                },
+                            },
                         ]
-                    }    
+                    }
                 }
             )
 
@@ -389,7 +560,11 @@ def build_json(
             result["PE_MiningHead"].update(
                 {
                     f"MineHead_{ii}": {
-                        "Location": {"X": feature[0], "Y": feature[1], "Z": feature[2]}
+                        "Location": {
+                            "X": feature[0],
+                            "Y": feature[1],
+                            "Z": feature[2],
+                        }
                     }
                 }
             )
