@@ -35,6 +35,45 @@
       "Rooms.Linear.CustomBig"
     ]
   },
+  "SMALL_FLAT": {
+    "max_cube_vol": 2200,
+    "verticality": ["flat", "heightmap", "up"],
+    "bounds": 3500,
+    "inverted": false,
+    "PE": false,
+    "remove_pockets": true,
+    "size": 20,
+    "randomize_size": false,
+    "tags": [
+      "Flat.Linear.CustomSmall"
+    ]
+  },
+  "MEDIUM_FLAT": {
+    "max_cube_vol": 2500,
+    "verticality": ["flat", "heightmap", "up"],
+    "bounds": 3500,
+    "inverted": false,
+    "PE": false,
+    "remove_pockets": true,
+    "size": 30,
+    "randomize_size": false,
+    "tags": [
+      "Flat.Linear.CustomMedium"
+    ]
+  },
+  "BIG_FLAT": {
+    "max_cube_vol": 3500,
+    "verticality": ["flat", "heightmap", "up"],
+    "bounds": 4500,
+    "inverted": false,
+    "PE": false,
+    "remove_pockets": true,
+    "size": 30,
+    "randomize_size": true,
+    "tags": [
+      "Flat.Linear.CustomBig"
+    ]
+  },
   "SMALL_DLA": {
     "max_cube_vol": 2200,
     "bounds": 4500,
