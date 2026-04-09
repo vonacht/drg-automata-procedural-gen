@@ -273,6 +273,35 @@ def generate_entrances(circles, graph):
     return entrances
 
 
+def generate_pillars_balls(circles):
+    """
+    Here we generate some random pillars, not too many, just for added decoration.
+    """
+    pillars = []
+    suitable_circles = sorted(
+        circles, key=lambda x: x["radius"], reverse=True
+    )[:3]
+    for c in suitable_circles:
+        x = c["center"][0]
+        y = c["center"][1]
+        z = c["center"][2]
+        pillars.append(
+            [
+                {
+                    "Location": (x, y, z + 300),
+                    "Range": 600,
+                    "NoiseRange": 100,
+                },
+                {
+                    "Location": (x, y + 250, z + 300),
+                    "Range": 600,
+                    "NoiseRange": 100,
+                },
+            ]
+        )
+    return pillars
+
+
 def generate_pillars(circles):
     """
     Here we generate some random pillars, not too many, just for added decoration.
