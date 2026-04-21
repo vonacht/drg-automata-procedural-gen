@@ -214,63 +214,216 @@ def generate_exit_w_vector(circles, point, vector):
     ]
 
 
-def generate_entrances(circles, graph):
+# def generate_entrances(circles, graph):
 
-    spheres_w_entrance = [0]
-    # First decide the entrances:
-    circles_w_one_neighbor = [
-        k for k in graph if len(graph[k]) == 1 and k != 0 and 0 not in graph[k]
-    ]
-    if not circles_w_one_neighbor:
-        # spheres_w_exit = [random.randrange(1, len(circles))]
-        coords_y = [c["center"][1] for c in circles]
-        spheres_w_exit = [np.argmax(coords_y), np.argmin(coords_y)]
-    else:
-        spheres_w_exit = circles_w_one_neighbor + [
-            x
-            for x in random.choices(
-                range(len(circles)), k=random.randrange(1, 3)
+#     spheres_w_entrance = [0]
+#     # First decide the entrances:
+#     circles_w_one_neighbor = [
+#         k for k in graph if len(graph[k]) == 1 and k != 0 and 0 not in graph[k]
+#     ]
+#     if not circles_w_one_neighbor:
+#         # spheres_w_exit = [random.randrange(1, len(circles))]
+#         coords_y = [c["center"][1] for c in circles]
+#         spheres_w_exit = [np.argmax(coords_y), np.argmin(coords_y)]
+#     else:
+#         spheres_w_exit = circles_w_one_neighbor + [
+#             x
+#             for x in random.choices(
+#                 range(len(circles)), k=random.randrange(1, 3)
+#             )
+#             if x not in circles_w_one_neighbor and x != 0 and 0 not in graph[x]
+#         ]
+
+#     entrances = []
+#     for ii, t in [(spheres_w_entrance, "Entrance"), (spheres_w_exit, "Exit")]:
+#         for sphere_idx in ii:
+#             sphere_coords = (
+#                 circles[sphere_idx]["center"][0],
+#                 circles[sphere_idx]["center"][1],
+#                 circles[sphere_idx]["radius"],
+#             )
+#             neighbors = graph[sphere_idx]
+#             neighbor_coords = [
+#                 (
+#                     circles[circle]["center"][0],
+#                     circles[circle]["center"][1],
+#                     circles[circle]["radius"],
+#                 )
+#                 for circle in neighbors
+#             ]
+#             angle, _, _ = most_free_angle(sphere_coords, neighbor_coords)
+#             angle = 0 if angle is None else angle
+#             vector_angle = np.degrees(angle)
+#             entrances.append(
+#                 (
+#                     circles[sphere_idx]["center"][0]
+#                     + circles[sphere_idx]["radius"] * math.cos(angle),
+#                     circles[sphere_idx]["center"][1]
+#                     + circles[sphere_idx]["radius"] * math.sin(angle),
+#                     circles[sphere_idx]["center"][2]
+#                     + circles[sphere_idx].get("floor_depth", 0) * 0.8
+#                     + circles[sphere_idx]["radius"] * 0.2,
+#                     0,
+#                     0,
+#                     vector_angle,
+#                     t,
+#                 )
+#             )
+
+#     return entrances
+
+
+def center_of_mass(disks):
+    """
+    disks: dict like {key: {"center": (x, y), "radius": r}, ...}
+    returns: (x_com, y_com)
+    """
+    total_mass = 0.0
+    x_sum = 0.0
+    y_sum = 0.0
+
+    for disk in disks:
+        x, y, _ = disk["center"]
+        r = disk["radius"]
+        mass = r**2  # proportional to area (π cancels out)
+
+        total_mass += mass
+        x_sum += mass * x
+        y_sum += mass * y
+
+    if total_mass == 0:
+        raise ValueError("Total mass is zero")
+
+    return (x_sum / total_mass, y_sum / total_mass)
+
+
+def ray_circle_intersections(cx, cy, dx, dy, disk):
+    (x0, y0, _) = disk["center"]
+    r = disk["radius"]
+
+    ox = cx - x0
+    oy = cy - y0
+
+    a = dx * dx + dy * dy
+    b = 2 * (ox * dx + oy * dy)
+    c = ox * ox + oy * oy - r * r
+
+    disc = b * b - 4 * a * c
+    if disc < 0:
+        return []
+
+    sqrt_disc = math.sqrt(disc)
+    t1 = (-b - sqrt_disc) / (2 * a)
+    t2 = (-b + sqrt_disc) / (2 * a)
+
+    return [t for t in (t1, t2) if t >= 0]
+
+
+def last_disk_intersections(disks, center, angle_step):
+    """
+    Returns for each ray:
+        (ray_angle, disk_key, intersection_point, angle_from_origin)
+    """
+    cx, cy = center
+    results = []
+
+    angle = 0.0
+    while angle < 2 * math.pi:
+        dx = math.cos(angle)
+        dy = math.sin(angle)
+
+        best_t = -1
+        best_disk = None
+
+        for ii, disk in enumerate(disks):
+            ts = ray_circle_intersections(cx, cy, dx, dy, disk)
+            if ts:
+                t_far = max(ts)
+                if t_far > best_t:
+                    best_t = t_far
+                    best_disk = ii
+
+        if best_disk is not None:
+            # intersection point
+            ix = cx + best_t * dx
+            iy = cy + best_t * dy
+
+            # angle relative to (0,0)
+            theta_origin = math.atan2(iy, ix)
+
+            results.append(
+                (
+                    np.rad2deg(angle),
+                    disks[best_disk],
+                    (ix, iy, disks[best_disk]["center"][2]),
+                    np.rad2deg(theta_origin),
+                )
             )
-            if x not in circles_w_one_neighbor and x != 0 and 0 not in graph[x]
-        ]
+        else:
+            results.append((np.rad2deg(angle), None, None, None))
+
+        angle += angle_step
+
+    return results
+
+
+def generate_entrances(
+    circles,
+    entrance_cutoff_angle=200,
+    exit_cutoff_angle=180,
+    theta=30,
+    return_type=None,
+):
 
     entrances = []
-    for ii, t in [(spheres_w_entrance, "Entrance"), (spheres_w_exit, "Exit")]:
-        for sphere_idx in ii:
-            sphere_coords = (
-                circles[sphere_idx]["center"][0],
-                circles[sphere_idx]["center"][1],
-                circles[sphere_idx]["radius"],
+    exits = []
+    room_center = center_of_mass(circles)
+    valid_entry_points = [
+        e
+        for e in last_disk_intersections(
+            circles, room_center, np.deg2rad(theta)
+        )
+        if e[1] is not None
+    ]
+    for entrance in [
+        e for e in valid_entry_points if e[0] > entrance_cutoff_angle
+    ]:
+        entrances.append(
+            (
+                entrance[2][0],
+                entrance[2][1],
+                entrance[1]["center"][2]
+                + entrance[1]["radius"] * 0.2
+                + entrance[1].get("floor_depth", 0) * 0.8,
+                0,
+                0,
+                entrance[3],
+                "Entrance",
             )
-            neighbors = graph[sphere_idx]
-            neighbor_coords = [
-                (
-                    circles[circle]["center"][0],
-                    circles[circle]["center"][1],
-                    circles[circle]["radius"],
-                )
-                for circle in neighbors
-            ]
-            angle, _, _ = most_free_angle(sphere_coords, neighbor_coords)
-            angle = 0 if angle is None else angle
-            vector_angle = np.degrees(angle)
-            entrances.append(
-                (
-                    circles[sphere_idx]["center"][0]
-                    + circles[sphere_idx]["radius"] * math.cos(angle),
-                    circles[sphere_idx]["center"][1]
-                    + circles[sphere_idx]["radius"] * math.sin(angle),
-                    circles[sphere_idx]["center"][2]
-                    + circles[sphere_idx].get("floor_depth", 0) * 0.8
-                    + circles[sphere_idx]["radius"] * 0.2,
-                    0,
-                    0,
-                    vector_angle,
-                    t,
-                )
+        )
+    for exit in [
+        e for e in valid_entry_points if e[0] < entrance_cutoff_angle
+    ]:
+        exits.append(
+            (
+                exit[2][0],
+                exit[2][1],
+                exit[1]["center"][2]
+                + exit[1]["radius"] * 0.2
+                + exit[1].get("floor_depth", 0) * 0.8,
+                0,
+                0,
+                exit[3],
+                "Exit",
             )
-
-    return entrances
+        )
+    match return_type:
+        case "Exits":
+            return exits
+        case "Entrances":
+            return entrances
+        case _:
+            return entrances + exits
 
 
 def generate_pillars_balls(circles, method=None):
