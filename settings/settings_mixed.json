@@ -12,7 +12,7 @@
       "Rooms.Linear.Vertical"
     ]
   },
-  "SMALL_FLAT": {
+  "SMALL_FLAT_NORMAL": {
     "max_cube_vol": 2000,
     "bounds": 2500,
     "inverted": false,
@@ -38,7 +38,7 @@
       "Rooms.Linear.Slope"
     ]
   },
-  "MEDIUM_FLAT": {
+  "MEDIUM_FLAT_NORMAL": {
     "max_cube_vol": 2500,
     "bounds": 3500,
     "inverted": false,
@@ -90,7 +90,7 @@
       "Rooms.Linear.Vertical"
     ]
   },
-  "BIG_FLAT": {
+  "BIG_FLAT_NORMAL": {
     "max_cube_vol": 3500,
     "bounds": 4000,
     "inverted": false,

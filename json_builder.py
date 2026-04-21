@@ -273,63 +273,196 @@ def generate_entrances(circles, graph):
     return entrances
 
 
-def generate_pillars_balls(circles):
+def generate_pillars_balls(circles, method=None):
     """
     Here we generate some random pillars, not too many, just for added decoration.
     """
+    pillar_method = (
+        random.choice(
+            [
+                "stalactite",
+                "stalagmite",
+                "arch",
+                "triangle",
+                "straight",
+                "balls",
+            ]
+        )
+        if method is None
+        else method
+    )
+    pillar_method = "balls"
     pillars = []
+    # number_of_pillars = (
+    #     random.randrange(5) if len(circles) > 4 else len(circles) - 1
+    # )
     suitable_circles = sorted(
         circles, key=lambda x: x["radius"], reverse=True
     )[:3]
-    for c in suitable_circles:
-        x = c["center"][0]
-        y = c["center"][1]
-        z = c["center"][2]
-        pillars.append(
-            [
-                {
-                    "Location": (x, y, z + 300),
-                    "Range": 600,
-                    "NoiseRange": 100,
-                },
-                {
-                    "Location": (x, y + 250, z + 300),
-                    "Range": 600,
-                    "NoiseRange": 100,
-                },
-            ]
-        )
+
+    match pillar_method:
+        case "balls":
+            BALL_RADIUS = 500
+            for c in suitable_circles:
+                x = c["center"][0]
+                y = c["center"][1]
+                z = c["center"][2]
+                pillars.append(
+                    [
+                        {
+                            "Location": (x, y, z + 300),
+                            "Range": BALL_RADIUS,
+                            "NoiseRange": 100,
+                        },
+                        {
+                            "Location": (x, y + 250, z + 300),
+                            "Range": BALL_RADIUS,
+                            "NoiseRange": 100,
+                        },
+                    ]
+                )
     return pillars
 
 
-def generate_pillars(circles):
+def sample_point_in_disk(disk):
+    cx, cy, z = disk["center"]
+    r = disk["radius"] * 0.7
+
+    # Random angle
+    theta = random.uniform(0, 2 * math.pi)
+
+    # Correct radius scaling for uniform distribution
+    radius = r * math.sqrt(random.uniform(0, 1))
+
+    # Convert to Cartesian coordinates
+    x = cx + radius * math.cos(theta)
+    y = cy + radius * math.sin(theta)
+
+    return (x, y, z)
+
+
+def generate_pillars(circles, method=None, height_mult=1):
     """
     Here we generate some random pillars, not too many, just for added decoration.
     """
+    pillar_method = (
+        random.choice(
+            [
+                "stalactite",
+                "stalagmite",
+                "straight",
+                "balls",
+                "none",
+            ]
+        )
+        if method is None
+        else method
+    )
+    print(pillar_method)
     pillars = []
-    if len(circles) > 3:
-        circles_w_pillars = random.randrange(len(circles) // 3)
-        for c in random.choices(circles, k=circles_w_pillars):
-            if c["radius"] < 400:
-                continue
-            x = c["center"][0]
-            y = c["center"][1]
-            pillars.append(
-                {
-                    "Location_1": (
-                        x,
-                        y,
-                        c["center"][2] - c["radius"] * 0.3,
-                    ),
-                    "Location_2": (
-                        x,
-                        y,
-                        c["center"][2] + c["radius"] * 1.3,
-                    ),
-                    "Range": random.randrange(150, 200),
-                    "NoiseRange": random.randrange(100, 150),
-                }
-            )
+    # number_of_pillars = (
+    #     random.randrange(5) if len(circles) > 4 else len(circles) - 1
+    # )
+    suitable_circles = sorted(
+        circles, key=lambda x: x["radius"], reverse=True
+    )[:3]
+
+    match pillar_method:
+        case "balls":
+            for c in suitable_circles:
+                BALL_RADIUS = min(500, random.uniform(300, c["radius"] * 0.5))
+                print(BALL_RADIUS)
+                x, y, z = sample_point_in_disk(c)
+                pillars.append(
+                    [
+                        {
+                            "Location": (x, y, z + 300),
+                            "Range": BALL_RADIUS,
+                            "NoiseRange": 100,
+                        },
+                        {
+                            "Location": (x, y + 250, z + 300),
+                            "Range": BALL_RADIUS,
+                            "NoiseRange": 100,
+                        },
+                    ]
+                )
+        case "straight":
+            for c in suitable_circles:
+                if c["radius"] < 400:
+                    continue
+                x, y, _ = sample_point_in_disk(c)
+                pillars.append(
+                    [
+                        {
+                            "Location": (
+                                x,
+                                y,
+                                c["center"][2] - c["radius"] * 0.3,
+                            ),
+                            "Range": random.randrange(150, 200),
+                            "NoiseRange": random.randrange(100, 150),
+                        },
+                        {
+                            "Location": (
+                                x,
+                                y,
+                                c["center"][2]
+                                + c["radius"] * 1.3 * height_mult,
+                            ),
+                            "Range": random.randrange(150, 200),
+                            "NoiseRange": random.randrange(100, 150),
+                        },
+                    ]
+                )
+        case "none":
+            pass
+        case "stalagmite":
+            for c in suitable_circles:
+                if c["radius"] < 400:
+                    continue
+                x, y, _ = sample_point_in_disk(c)
+                heights = np.linspace(
+                    c["radius"] * 1.2, c["radius"] * 0.4, num=6
+                )
+                thickness = np.linspace(200, 50, num=6)
+                pillars.append(
+                    [
+                        {
+                            "Location": (
+                                x,
+                                y,
+                                c["center"][2] + h,
+                            ),
+                            "Range": t,
+                            "NoiseRange": random.randrange(100),
+                        }
+                        for h, t in zip(heights, thickness)
+                    ]
+                )
+        case "stalactite":
+            for c in suitable_circles:
+                if c["radius"] < 400:
+                    continue
+                x, y, _ = sample_point_in_disk(c)
+                heights = np.linspace(
+                    c["radius"] * -0.2, c["radius"] * 0.6, num=6
+                )
+                thickness = np.linspace(200, 50, num=6)
+                pillars.append(
+                    [
+                        {
+                            "Location": (
+                                x,
+                                y,
+                                c["center"][2] + h,
+                            ),
+                            "Range": t,
+                            "NoiseRange": random.randrange(100),
+                        }
+                        for h, t in zip(heights, thickness)
+                    ]
+                )
     return pillars
 
 
@@ -362,6 +495,22 @@ def build_json_multiple_ffill(
                             "height", circle["radius"]
                         ),
                         "FloorDepth": circle.get("floor_depth", 0),
+                    }
+                )
+            elif circle.get("floor_angle"):
+                lines["Points"].append(
+                    {
+                        "Location": {
+                            "X": circle["center"][0],
+                            "Y": circle["center"][1],
+                            "Z": circle["center"][2],
+                        },
+                        "HRange": circle["radius"],
+                        "VRange": circle.get("height", circle["radius"]),
+                        "CeilingHeight": circle.get(
+                            "height", circle["radius"]
+                        ),
+                        "FloorAngle": circle.get("floor_angle", 0),
                     }
                 )
             else:
@@ -541,7 +690,48 @@ def build_json(
             }
         )
 
-    if pillars:
+    # if pillars:
+    #     result["FloodFillPillars"] = {}
+    #     for ii, p in enumerate(pillars):
+    #         result["FloodFillPillars"].update(
+    #             {
+    #                 f"FloodFillPillar_{ii}": {
+    #                     "Points": [
+    #                         {
+    #                             "Location": {
+    #                                 "X": p["Location_1"][0],
+    #                                 "Y": p["Location_1"][1],
+    #                                 "Z": p["Location_1"][2],
+    #                             },
+    #                             "Range": {
+    #                                 "Min": p["Range"],
+    #                                 "Max": p["Range"],
+    #                             },
+    #                             "NoiseRange": {
+    #                                 "Min": p["NoiseRange"],
+    #                                 "Max": p["NoiseRange"],
+    #                             },
+    #                         },
+    #                         {
+    #                             "Location": {
+    #                                 "X": p["Location_2"][0],
+    #                                 "Y": p["Location_2"][1],
+    #                                 "Z": p["Location_2"][2],
+    #                             },
+    #                             "Range": {
+    #                                 "Min": p["Range"],
+    #                                 "Max": p["Range"],
+    #                             },
+    #                             "NoiseRange": {
+    #                                 "Min": p["NoiseRange"],
+    #                                 "Max": p["NoiseRange"],
+    #                             },
+    #                         },
+    #                     ]
+    #                 }
+    #             }
+    #         )
+    if list(pillars):
         result["FloodFillPillars"] = {}
         for ii, p in enumerate(pillars):
             result["FloodFillPillars"].update(
@@ -550,34 +740,20 @@ def build_json(
                         "Points": [
                             {
                                 "Location": {
-                                    "X": p["Location_1"][0],
-                                    "Y": p["Location_1"][1],
-                                    "Z": p["Location_1"][2],
+                                    "X": z["Location"][0],
+                                    "Y": z["Location"][1],
+                                    "Z": z["Location"][2],
                                 },
                                 "Range": {
-                                    "Min": p["Range"],
-                                    "Max": p["Range"],
+                                    "Min": z["Range"],
+                                    "Max": z["Range"],
                                 },
                                 "NoiseRange": {
-                                    "Min": p["NoiseRange"],
-                                    "Max": p["NoiseRange"],
+                                    "Min": z["NoiseRange"],
+                                    "Max": z["NoiseRange"],
                                 },
-                            },
-                            {
-                                "Location": {
-                                    "X": p["Location_2"][0],
-                                    "Y": p["Location_2"][1],
-                                    "Z": p["Location_2"][2],
-                                },
-                                "Range": {
-                                    "Min": p["Range"],
-                                    "Max": p["Range"],
-                                },
-                                "NoiseRange": {
-                                    "Min": p["NoiseRange"],
-                                    "Max": p["NoiseRange"],
-                                },
-                            },
+                            }
+                            for z in p
                         ]
                     }
                 }
