@@ -369,8 +369,8 @@ def last_disk_intersections(disks, center, angle_step):
 
 def generate_entrances(
     circles,
-    entrance_cutoff_angle=200,
-    exit_cutoff_angle=180,
+    entrance_interval=(200, 360),
+    exit_interval=(0, 180),
     theta=30,
     return_type=None,
 ):
@@ -386,7 +386,9 @@ def generate_entrances(
         if e[1] is not None
     ]
     for entrance in [
-        e for e in valid_entry_points if e[0] > entrance_cutoff_angle
+        e
+        for e in valid_entry_points
+        if entrance_interval[0] < e[0] < entrance_interval[1]
     ]:
         entrances.append(
             (
@@ -402,7 +404,9 @@ def generate_entrances(
             )
         )
     for exit in [
-        e for e in valid_entry_points if e[0] < entrance_cutoff_angle
+        e
+        for e in valid_entry_points
+        if exit_interval[0] < e[0] < exit_interval[1]
     ]:
         exits.append(
             (
@@ -499,15 +503,7 @@ def generate_pillars(circles, method=None, height_mult=1):
     Here we generate some random pillars, not too many, just for added decoration.
     """
     pillar_method = (
-        random.choice(
-            [
-                "stalactite",
-                "stalagmite",
-                "straight",
-                "balls",
-                "none",
-            ]
-        )
+        random.choice(["stalactite", "stalagmite", "straight", "balls"])
         if method is None
         else method
     )

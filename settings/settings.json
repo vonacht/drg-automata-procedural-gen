@@ -36,8 +36,8 @@
     ]
   },
   "SMALL_FLAT": {
-    "max_cube_vol": 2200,
-    "verticality": ["flat", "heightmap", "up"],
+    "max_cube_vol": 2500,
+    "verticality": ["heightmap", "flat"],
     "bounds": 3500,
     "inverted": false,
     "PE": false,
@@ -50,7 +50,7 @@
   },
   "MEDIUM_FLAT": {
     "max_cube_vol": 2500,
-    "verticality": ["flat", "heightmap", "up"],
+    "verticality": ["flat", "heightmap"],
     "bounds": 3500,
     "inverted": false,
     "PE": false,
@@ -63,7 +63,7 @@
   },
   "BIG_FLAT": {
     "max_cube_vol": 3500,
-    "verticality": ["flat", "heightmap", "up"],
+    "verticality": ["flat", "heightmap"],
     "bounds": 4500,
     "inverted": false,
     "PE": false,

@@ -924,63 +924,69 @@ def traverse_maze_1(maze, start=(1, 1)):
 
 def run_doublerooms(mixed):
     tags = {"small": 2000, "medium": 2500, "big": 3000}
-    for i in range(25):
-        for k, v in tags.items():
-            generate_doubleroom(k, i, v, mixed, "dive")
-    for i in range(60):
-        for k, v in tags.items():
-            generate_doubleroom(k, i, v, mixed, "overlap")
-    for i in range(25):
-        for k, v in tags.items():
-            generate_doubleroom(k, i, v, mixed, "side")
-    for i in range(10):
-        for k, v in tags.items():
-            generate_doubleroom(k, i, v, mixed, "ring")
-    for i in range(20):
-        for k, v in tags.items():
-            generate_doubleroom(k, i, v, mixed, "upwards_pit")
-    for i in range(20):
-        for k, v in tags.items():
-            generate_doubleroom(k, i, v, mixed, "concave")
-    for i in range(20):
-        for k, v in tags.items():
-            generate_doubleroom(k, i, v, mixed, "slope")
-    # # for i in range(20):
-    # #     for k, v in tags.items():
-    # #         generate_doubleroom(k, i, v, mixed, "maze")
-    for i in range(20):
-        for k, v in tags.items():
-            generate_doubleroom(k, i, v, mixed, "delaunay")
-    for i in range(20):
-        for k, v in tags.items():
-            generate_doubleroom(k, i, v, mixed, "patterned")
-    for i in range(20):
-        for k, v in tags.items():
-            generate_doubleroom(k, i, v, mixed, "ramp")
-    for i in range(20):
-        for k, v in tags.items():
-            generate_doubleroom(k, i, v, mixed, "trench")
-    for i in range(20):
-        for k, v in tags.items():
-            generate_doubleroom(k, i, v, mixed, "tunnel")
-    for i in range(20):
-        for k, v in tags.items():
-            generate_doubleroom(k, i, v, mixed, "doublefloor")
-    # # for i in range(20):
+    # for i in range(25):
     #     for k, v in tags.items():
-    #         generate_doubleroom(k, i, v, mixed, "ball")
+    #         generate_doubleroom(k, i, v, mixed, "dive")
+    # for i in range(60):
+    #     for k, v in tags.items():
+    #         generate_doubleroom(k, i, v, mixed, "overlap")
+    # for i in range(25):
+    #     for k, v in tags.items():
+    #         generate_doubleroom(k, i, v, mixed, "side")
     # for i in range(10):
     #     for k, v in tags.items():
-    #         generate_doubleroom(k, i, v, mixed, "erosion")
-    for i in range(20):
+    #         generate_doubleroom(k, i, v, mixed, "ring")
+    # for i in range(20):
+    #     for k, v in tags.items():
+    #         generate_doubleroom(k, i, v, mixed, "upwards_pit")
+    # for i in range(20):
+    #     for k, v in tags.items():
+    #         generate_doubleroom(k, i, v, mixed, "concave")
+    # for i in range(20):
+    #     for k, v in tags.items():
+    #         generate_doubleroom(k, i, v, mixed, "slope")
+    # # # for i in range(20):
+    # # #     for k, v in tags.items():
+    # # #         generate_doubleroom(k, i, v, mixed, "maze")
+    # for i in range(20):
+    #     for k, v in tags.items():
+    #         generate_doubleroom(k, i, v, mixed, "delaunay")
+    # for i in range(20):
+    #     for k, v in tags.items():
+    #         generate_doubleroom(k, i, v, mixed, "patterned")
+    # for i in range(20):
+    #     for k, v in tags.items():
+    #         generate_doubleroom(k, i, v, mixed, "ramp")
+    # for i in range(20):
+    #     for k, v in tags.items():
+    #         generate_doubleroom(k, i, v, mixed, "trench")
+    # for i in range(20):
+    #     for k, v in tags.items():
+    #         generate_doubleroom(k, i, v, mixed, "tunnel")
+    # for i in range(20):
+    #     for k, v in tags.items():
+    #         generate_doubleroom(k, i, v, mixed, "doublefloor")
+    # # # for i in range(20):
+    # #     for k, v in tags.items():
+    # #         generate_doubleroom(k, i, v, mixed, "ball")
+    # # for i in range(10):
+    # #     for k, v in tags.items():
+    # #         generate_doubleroom(k, i, v, mixed, "erosion")
+    # for i in range(20):
+    #     for k, v in tags.items():
+    #         generate_doubleroom(k, i, v, mixed, "decoy")
+    # for i in range(20):
+    #     for k, v in tags.items():
+    #         generate_doubleroom(k, i, v, mixed, "links")
+    # for i in range(20):
+    #     for k, v in tags.items():
+    #         generate_doubleroom(k, i, v, mixed, "divetunnel")
+    # for i in range(20):
+    #     for k, v in tags.items():
+    #         generate_doubleroom(k, i, v, mixed, "triple")
+    for i in range(40):
         for k, v in tags.items():
-            generate_doubleroom(k, i, v, mixed, "decoy")
-    for i in range(20):
-        for k, v in tags.items():
-            generate_doubleroom(k, i, v, mixed, "links")
-    for i in range(20):
-        for k, v in tags.items():
-            generate_doubleroom(k, i, v, mixed, "divetunnel")
+            generate_doubleroom(k, i, v, mixed, "shifted")
 
 
 def generate_room_graph(spheres):
@@ -1042,6 +1048,7 @@ def generate_doubleroom(tag, room_num, size, mixed, room_type):
         # print(method)
         method = "automaton"
         verticality = random.choice(["up", "down", "flat", "heightmap"])
+        verticality = random.choice(["flat", "heightmap"])
         # automaton_size = random.choice([15, 22, 30])
         automaton_size = 15
         while True:
@@ -1083,6 +1090,7 @@ def generate_doubleroom(tag, room_num, size, mixed, room_type):
 
     overlap_1 = random.choice([True, False])
     overlap_2 = random.choice([True, False])
+    overlap_1, overlap_2 = False, False
     if overlap_1:
         path1, circles1, graph1, *_ = make_one_room()
         path2, circles2, graph2, *_ = make_one_room()
@@ -1142,9 +1150,7 @@ def generate_doubleroom(tag, room_num, size, mixed, room_type):
                 b for b in generate_entrances(a2) if b[-1] == "Entrance"
             ]
             second_entrances = [
-                b
-                for b in generate_entrances(b2, exit_cutoff_angle=0, theta=50)
-                if b[-1] == "Exit"
+                b for b in generate_entrances(b2, theta=50) if b[-1] == "Exit"
             ]
             pillars = generate_pillars(a2) + generate_pillars(b2)
             pe = []
@@ -1211,8 +1217,10 @@ def generate_doubleroom(tag, room_num, size, mixed, room_type):
                 ]
             pillars = generate_pillars(a2) + generate_pillars(a_copy)
             pe = []
-            name = f"RMA_ICGEN_{tag.upper()}_OVERLAPROOM{room_num}.json"
-            room_name = f"{tag.upper()}_OVERLAPROOM"
+            # name = f"RMA_ICGEN_{tag.upper()}_OVERLAPROOM{room_num}.json"
+            # room_name = f"{tag.upper()}_OVERLAPROOM"
+            name = f"RMA_ICGEN_{tag.upper()}_FLAT{room_num}.json"
+            room_name = f"{tag.upper()}_FLAT"
         case "side":
             direction = random.choice(["-y", "y", "x"])
             direction = "x"
@@ -1443,35 +1451,67 @@ def generate_doubleroom(tag, room_num, size, mixed, room_type):
             name = f"RMA_ICGEN_{tag.upper()}_UPWARDSPIT{room_num}.json"
             room_name = f"{tag.upper()}_UPWARDSPIT"
         case "concave":
-            pit_room = random.choices([False, True], weights=[0.5, 0.5], k=1)[
-                0
-            ]
-            outer_radius = random.randrange(1500, 3000)
-            rings = [
-                circle_points(10, outer_radius - 200 * i, h=-100 * i)
-                for i in range(12)
-            ]
-            rings = [
-                [{"center": (c[0], c[1], c[2]), "radius": 600} for c in p]
-                for p in rings
-            ]
-            rings = [p + [p[0]] for p in rings]
-            if pit_room:
-                second_room = shift_room(a2, (0, 0, -1800))
+            bowl_type = random.choice(["mound", "bowl"])
+            print(bowl_type)
+            if bowl_type == "bowl":
+                pit_room = random.choices(
+                    [False, True], weights=[0.5, 0.5], k=1
+                )[0]
+                outer_radius = random.randrange(1500, 3000)
+                rings = [
+                    circle_points(10, outer_radius - 200 * i, h=-100 * i)
+                    for i in range(12)
+                ]
+                rings = [
+                    [{"center": (c[0], c[1], c[2]), "radius": 600} for c in p]
+                    for p in rings
+                ]
+                rings = [p + [p[0]] for p in rings]
+                if pit_room:
+                    second_room = shift_room(a2, (0, 0, -1800))
+                else:
+                    second_room = shift_room(a2, rings[0][4]["center"])
+                new_room = rings + [second_room]
+                traversal_paths = [list(range(11))] * len(rings) + [a1]
+                first_point = rings[0][0]
+                second_point = min(
+                    second_room, key=lambda x: x["center"][1] + x["center"][0]
+                )
+                first_entrances = generate_entrances(
+                    rings[0], return_type="Entrances"
+                )
+                second_entrances = generate_entrances(
+                    second_room, return_type="Exits"
+                )
             else:
+                outer_radius = random.randrange(1500, 3000)
+                outer_ring = circle_points(10, outer_radius + 200, h=0)
+                outer_ring = points_to_sphere(outer_ring, 900)
+                rings = [
+                    circle_points(10, outer_radius - 200 * i, h=100 * i)
+                    for i in range(12)
+                ]
+                rings = [
+                    [{"center": (c[0], c[1], c[2]), "radius": 600} for c in p]
+                    for p in rings
+                ]
+                rings = [p + [p[0]] for p in rings]
                 second_room = shift_room(a2, rings[0][4]["center"])
-            new_room = rings + [second_room]
-            traversal_paths = [list(range(11))] * len(rings) + [a1]
-            first_point = rings[0][0]
-            second_point = min(
-                second_room, key=lambda x: x["center"][1] + x["center"][0]
-            )
-            first_entrances = generate_entrances(
-                rings[0], return_type="Entrances"
-            )
-            second_entrances = generate_entrances(
-                second_room, return_type="Exits"
-            )
+                new_room = rings + [second_room] + [outer_ring]
+                traversal_paths = (
+                    [list(range(11))] * len(rings) + [a1] + [list(range(10))]
+                )
+                first_point = rings[0][0]
+                second_point = min(
+                    second_room, key=lambda x: x["center"][1] + x["center"][0]
+                )
+                first_entrances = generate_entrances(
+                    outer_ring, return_type="Entrances"
+                )
+                second_entrances = generate_entrances(
+                    second_room, return_type="Exits"
+                )
+
             # Entrances:
             # first_entrances = [
             #     (
@@ -1507,56 +1547,75 @@ def generate_doubleroom(tag, room_num, size, mixed, room_type):
             name = f"RMA_ICGEN_{tag.upper()}_CONCAVEROOM{room_num}.json"
             room_name = f"{tag.upper()}_CONCAVEROOM"
         case "slope":
-            angle = random.uniform(25, 45)
-            height = random.uniform(3000, 4000)
-            direction_vector = np.array(
-                [0, math.sin(np.deg2rad(angle + 180)) * height, -height]
-            )
-            main_slope = [
-                {"center": (0, 0, 0), "radius": random.uniform(600, 800)},
-                {
-                    "center": (direction_vector),
-                    "radius": random.uniform(600, 800),
-                },
-            ]
-            main_room = shift_room(a2, direction_vector / 2)
-            new_room = [main_slope] + [main_room]
-            traversal_paths = [[0, 1]] + [a3]
-            first_entrances = generate_entrances(
-                [main_slope[0]], return_type="Entrances"
-            )
-            second_entrances = generate_entrances(
-                main_room, return_type="Exits"
-            ) + generate_entrances([main_slope[-1]], return_type="Exits")
-            # first_point = main_slope[0]
-            # second_point = main_slope[-1]
-            # # Entrances:
-            # first_entrances = [
-            #     (
-            #         first_point["center"][0],
-            #         first_point["center"][1] + first_point["radius"],
-            #         first_point["center"][2] + 250,
-            #         0,
-            #         0,
-            #         90,
-            #         "Entrance",
-            #     )
-            # ]
-            # second_entrances = [
-            #     (
-            #         second_point["center"][0] + second_point["radius"],
-            #         second_point["center"][1],
-            #         second_point["center"][2] + 250,
-            #         0,
-            #         0,
-            #         -0,
-            #         "Exit",
-            #     )
-            # ] + [
-            #     e
-            #     for e in generate_entrances(main_room, a3)
-            #     if e[-1] != "Entrance"
-            # ]
+            method = random.choice(["slope", "twin"])
+            if method == "slope":
+                angle = random.uniform(25, 45)
+                height = random.uniform(3000, 4000)
+                direction_vector = np.array(
+                    [0, math.sin(np.deg2rad(angle + 180)) * height, -height]
+                )
+                main_slope = [
+                    {"center": (0, 0, 0), "radius": random.uniform(600, 800)},
+                    {
+                        "center": (direction_vector),
+                        "radius": random.uniform(600, 800),
+                    },
+                ]
+                main_room = shift_room(a2, direction_vector / 2)
+                new_room = [main_slope] + [main_room]
+                traversal_paths = [[0, 1]] + [a3]
+                first_entrances = generate_entrances(
+                    [main_slope[0]],
+                    return_type="Entrances",
+                    entrance_interval=[0, 180],
+                )
+                second_entrances = generate_entrances(
+                    main_room, return_type="Exits"
+                ) + generate_entrances(
+                    [main_slope[-1]],
+                    return_type="Exits",
+                    exit_interval=[0, 360],
+                )
+            else:
+                initial_area = [
+                    {"center": (0, -800, 0), "radius": 800},
+                    {"center": (0, 0, 0), "radius": 800},
+                ]
+                height = random.randrange(2500, 4000)
+                first_tunnel = quadratic_bezier_3d(
+                    (0, 0, 0),
+                    (0, height / 1.5, -height),
+                    (-3000, height / 3, -height / 2),
+                    n_points=30,
+                )
+                first_tunnel = points_to_sphere(
+                    first_tunnel, random.randrange(500, 800)
+                )
+                second_tunnel = quadratic_bezier_3d(
+                    (0, 0, 0),
+                    (0, height / 1.5, -height),
+                    (+3000, height / 3, -height / 2),
+                    n_points=30,
+                )
+                second_tunnel = points_to_sphere(
+                    second_tunnel, random.randrange(500, 800)
+                )
+                main_room = shift_room(a2, (0, 2000, -height))
+                new_room = (
+                    [first_tunnel]
+                    + [second_tunnel]
+                    + [main_room]
+                    + [initial_area]
+                )
+                traversal_paths = (
+                    [list(range(len(first_tunnel)))] * 2 + [a1] + [[0, 1]]
+                )
+                first_entrances = generate_entrances(
+                    main_room, return_type="Exits", exit_interval=[0, 360]
+                )
+                second_entrances = generate_entrances(
+                    initial_area, return_type="Entrances"
+                )
             pillars = generate_pillars(main_room)
             pe = []
             name = f"RMA_ICGEN_{tag.upper()}_SLOPEROOM{room_num}.json"
@@ -1625,8 +1684,10 @@ def generate_doubleroom(tag, room_num, size, mixed, room_type):
                     name = f"RMA_ICGEN_{tag.upper()}_MAZEROOM{room_num}.json"
                     room_name = f"{tag.upper()}_MAZEROOM"
                 case "delaunay":
+                    delaunay_method = random.choice(["normal", "pizza"])
+                    print(delaunay_method)
                     sign = random.choice([-1, 1])
-                    tower_stack = 4
+                    tower_stack = 7
                     points, _, path = generate_complete_road_traversal(
                         6, 0.5, width=2, height=2
                     )
@@ -1636,7 +1697,11 @@ def generate_doubleroom(tag, room_num, size, mixed, room_type):
                             "center": (
                                 m[0],
                                 m[1],
-                                sign * 0.3 * m[0] + sign * 0.3 * m[1],
+                                (
+                                    sign * 0.3 * m[0] + sign * 0.3 * m[1]
+                                    if delaunay_method == "normal"
+                                    else 0
+                                ),
                             ),
                             "radius": 0.13,
                         }
@@ -1658,20 +1723,40 @@ def generate_doubleroom(tag, room_num, size, mixed, room_type):
                         room.append(delaunay_w_z_offset)
                     room.append(delaunay_points)
                     room = scale_spheres_multiple_ffill(room, 3200)
-                    new_room = room
-                    traversal_paths = [path] * tower_stack
-                    first_point = max(
-                        room[0], key=lambda x: x["center"][0] + x["center"][1]
-                    )
-                    second_point = min(
-                        room[0], key=lambda x: x["center"][0] + x["center"][1]
-                    )
-                    first_entrances = generate_entrances(
-                        room[0], return_type="Entrances", theta=10
-                    )
-                    second_entrances = generate_entrances(
-                        room[0], return_type="Exits", theta=10
-                    )
+                    if delaunay_method == "normal":
+                        new_room = room
+                        traversal_paths = [path] * tower_stack
+                        first_entrances = generate_entrances(
+                            room[0], return_type="Entrances", theta=10
+                        )
+                        second_entrances = generate_entrances(
+                            room[0], return_type="Exits", theta=10
+                        )
+                        pillars = []
+                        pe = []
+                    else:
+                        initial_area = [
+                            {
+                                "center": (0, 0, 1800),
+                                "radius": 2000,
+                            },
+                            {
+                                "center": (500, 0, 1800),
+                                "radius": 2000,
+                            },
+                        ]
+                        new_room = room + [initial_area]
+                        traversal_paths = [path] * (tower_stack + 1) + [[0, 1]]
+                        first_entrances = generate_entrances(
+                            initial_area,
+                            return_type="Entrances",
+                            entrance_interval=[0, 80],
+                        )
+                        second_entrances = generate_entrances(
+                            room[0], return_type="Exits"
+                        )
+                        pillars = generate_pillars(initial_area)
+                        pe = []
 
                     # first_entrances = [
                     #     (
@@ -1699,8 +1784,6 @@ def generate_doubleroom(tag, room_num, size, mixed, room_type):
                         f"RMA_ICGEN_{tag.upper()}_DELAUNAYROOM{room_num}.json"
                     )
                     room_name = f"{tag.upper()}_DELAUNAYROOM"
-            pillars = []
-            pe = []
         case "patterned":
             a2 = [{"center": c["center"], "radius": 800} for c in a2]
             a2_scaled = scale_spheres(a2, 1.1)
@@ -2102,7 +2185,7 @@ def generate_doubleroom(tag, room_num, size, mixed, room_type):
             name = f"RMA_ICGEN_{tag.upper()}_EROSIONROOM{room_num}.json"
             room_name = f"{tag.upper()}_EROSIONROOM"
         case "decoy":
-            tunnel_length = random.randrange(800, 1800)
+            tunnel_length = random.randrange(1600, 3000)
             tunnel_start, tunnel_end = (0, 0, 0), (0, 2 * tunnel_length, 0)
             tunnel = quadratic_bezier_3d(
                 tunnel_start,
@@ -2116,34 +2199,33 @@ def generate_doubleroom(tag, room_num, size, mixed, room_type):
             )
             simple_rooms = [
                 {
-                    "center": (tunnel_length * 0.8, 0, 0),
-                    "radius": tunnel_length,
+                    "center": (tunnel_length * 0.6, tunnel_length * 0.1, 0),
+                    "radius": tunnel_length / 1.5,
                 },
                 {
-                    "center": (tunnel_length * 0.8, 2 * tunnel_length, 0),
-                    "radius": tunnel_length,
+                    "center": (tunnel_length * 0.6, 1.8 * tunnel_length, 0),
+                    "radius": tunnel_length / 1.5,
                 },
             ]
             tunnel = points_to_sphere(tunnel, random.randrange(400, 550))
             shifted_room = shift_room(
-                a2,
-                random.choice(
-                    [
-                        compute_midpoint(
-                            simple_rooms[0]["center"],
-                            simple_rooms[-1]["center"],
-                        ),
-                        simple_rooms[0]["center"],
-                    ]
-                ),
+                a2, (tunnel_length * 0.6, tunnel_length, 0)
             )
             room = [tunnel] + [simple_rooms] + [shifted_room]
             traversal_paths = [list(range(len(tunnel)))] + [[0, 1]] + [a1]
             new_room = room
             first_entrances = generate_entrances(
-                shifted_room, return_type="Entrances"
+                [simple_rooms[0]],
+                return_type="Entrances",
+                entrance_interval=[220, 360],
+            ) + generate_entrances(
+                [simple_rooms[1]],
+                return_type="Entrances",
+                entrance_interval=[0, 60],
             )
-            second_entrances = generate_entrances(tunnel, return_type="Exits")
+            second_entrances = generate_entrances(
+                tunnel, return_type="Exits", exit_interval=[150, 260]
+            )
             # second_point = tunnel[random.randrange(3, 8)]
             # first_point = max(
             #     simple_rooms + shifted_room,
@@ -2358,6 +2440,52 @@ def generate_doubleroom(tag, room_num, size, mixed, room_type):
             pe = []
             name = f"RMA_ICGEN_{tag.upper()}_DIVETUNNEL{room_num}.json"
             room_name = f"{tag.upper()}_DIVETUNNEL"
+        case "triple":
+            direction_vector = np.array(a2[-1]["center"]) - np.array(
+                a2[0]["center"]
+            )
+            perpendicular_vector = perpendicular_2d_normalized(
+                direction_vector
+            )
+            new_room = [a2]
+            for ii in range(2):
+                axis = (0, 0, 0)
+                while axis == (0, 0, 0):
+                    axis = (
+                        random.choice([0, 1]),
+                        random.choice([0, 1]),
+                        random.choice([0, 1]),
+                    )
+                theta = np.radians(random.uniform(50, 120))
+                R = rotation_matrix_axis_angle(axis, theta)
+                center_of_rotation = direction_vector / 2
+                a_copy = rotate_spheres(b2, center_of_rotation, R)
+                new_room += [a_copy]
+            traversal_paths = [a1] + [b1] * 2
+            # Entrances:
+            first_entrances = [
+                b for b in generate_entrances(a2) if b[-1] == "Entrance"
+            ]
+            second_entrances = [
+                b for b in generate_entrances(a_copy) if b[-1] == "Exit"
+            ]
+            pillars = generate_pillars(a2) + generate_pillars(a_copy)
+            pe = []
+            name = f"RMA_ICGEN_{tag.upper()}_TRIPLEOVERLAPROOM{room_num}.json"
+            room_name = f"{tag.upper()}_TRIPLEOVERLAPROOM"
+        case "shifted":
+            randomized_height = random.choice([0, 250, 500, -250, -500])
+            b2 = shift_room(b2, (500, 500, randomized_height))
+            b2 = scale_spheres(b2, 1.3)
+            a2 = scale_spheres(a2, 1.3)
+            new_room = [a2] + [b2]
+            traversal_paths = [a1] + [b1]
+            first_entrances = generate_entrances(a2, return_type="Entrances")
+            second_entrances = generate_entrances(a2, return_type="Exits")
+            pillars = generate_pillars(a2) + generate_pillars(b2)
+            pe = generate_PE_features(a2)
+            name = f"RMA_ICGEN_{tag.upper()}_PEMINEHEAD{room_num}.json"
+            room_name = f"{tag.upper()}_PEMINEHEAD"
 
     if not mixed:
         tags = {
@@ -2687,7 +2815,7 @@ def generate_tunnel_room(
         0,
         "Exit",
     )
-    pillars = []
+    pillars = generate_pillars(scaled_spheres)
     pe_features = []
     if not mixed:
         tags = {
