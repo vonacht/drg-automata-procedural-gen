@@ -4,6 +4,7 @@ import json
 import math
 import logging
 import argparse
+import string
 import matplotlib.pyplot as plt
 from skimage.morphology import skeletonize
 from scipy.ndimage import distance_transform_edt
@@ -12,9 +13,16 @@ from itertools import product, pairwise
 from more_itertools import flatten
 from collections import defaultdict
 
+from alphabet import (
+    assemble_letter,
+    assemble_letter_devanagari,
+    assemble_letter_math,
+)
+from drop import return_half_disks
+
 from automata import CellularAutomaton
 
-from heightmap import generate_heightmap
+from heightmap import generate_heightmap, apply_heightmap_to_spheres
 from utils import (
     compute_room_scale_factor,
     scale_spheres,
@@ -67,6 +75,36 @@ def game_of_life_rule(state, neighbors):
         return 1 if alive_neighbors in SURVIVAL_THRESHOLD else 0
 
 
+def game_of_life_rule_64(state, neighbors):
+    BIRTH_THRESHOLD = [6, 7, 8]
+    SURVIVAL_THRESHOLD = [4, 5, 6, 7, 8]
+    alive_neighbors = sum(neighbors)
+    if state == 0:
+        return 1 if alive_neighbors in BIRTH_THRESHOLD else 0
+    else:
+        return 1 if alive_neighbors in SURVIVAL_THRESHOLD else 0
+
+
+def game_of_life_rule_53(state, neighbors):
+    BIRTH_THRESHOLD = [5, 6, 7, 8]
+    SURVIVAL_THRESHOLD = [3, 4, 5, 6, 7, 8]
+    alive_neighbors = sum(neighbors)
+    if state == 0:
+        return 1 if alive_neighbors in BIRTH_THRESHOLD else 0
+    else:
+        return 1 if alive_neighbors in SURVIVAL_THRESHOLD else 0
+
+
+def game_of_life_rule_65(state, neighbors):
+    BIRTH_THRESHOLD = [6, 7, 8]
+    SURVIVAL_THRESHOLD = [5, 6, 7, 8]
+    alive_neighbors = sum(neighbors)
+    if state == 0:
+        return 1 if alive_neighbors in BIRTH_THRESHOLD else 0
+    else:
+        return 1 if alive_neighbors in SURVIVAL_THRESHOLD else 0
+
+
 def run_automata(
     inverted=False,
     randomize_size=False,
@@ -74,16 +112,31 @@ def run_automata(
     iterations=8,
     remove_pockets=True,
 ):
-    M = (
-        random.choices([15, size], k=1, weights=[0.5, 0.5])[0]
-        if randomize_size
-        else size
+    M = random.randint(15, size) if randomize_size else size
+
+    rule = random.choice(
+        [
+            game_of_life_rule,
+            game_of_life_rule_53,
+            game_of_life_rule_64,
+            game_of_life_rule_65,
+        ]
     )
+
+    if rule is game_of_life_rule:
+        p_alive = 0.45
+    if rule is game_of_life_rule_53:
+        p_alive = 0.45
+    if rule is game_of_life_rule_64:
+        p_alive = 0.58
+    if rule is game_of_life_rule_65:
+        p_alive = 0.68
+
     ca = CellularAutomaton(
         M=M,
         N=M,
-        rule=game_of_life_rule,
-        p_alive=0.45,  # 45% initially alive
+        rule=rule,
+        p_alive=p_alive,  # 45% initially alive
         boundary="wrap",
     )
 
@@ -678,6 +731,21 @@ def shift_room(room, point):
     ]
 
 
+def shift_room_2d(room, point):
+    shift_vector = np.array(point) - np.array(room[0]["center"])
+    return [
+        {
+            "center": (
+                c["center"][0] + shift_vector[0],
+                c["center"][1] + shift_vector[1],
+                c["center"][2],
+            ),
+            "radius": c["radius"],
+        }
+        for c in room
+    ]
+
+
 def circle_points(n, r, c=(0, 0), h=None):
     """
     Generate n points on a circle of radius r centered at c.
@@ -969,9 +1037,9 @@ def run_doublerooms(mixed):
     # # # for i in range(20):
     # #     for k, v in tags.items():
     # #         generate_doubleroom(k, i, v, mixed, "ball")
-    # # for i in range(10):
-    # #     for k, v in tags.items():
-    # #         generate_doubleroom(k, i, v, mixed, "erosion")
+    # for i in range(20):
+    #     for k, v in tags.items():
+    #         generate_doubleroom(k, i, v, mixed, "erosion")
     # for i in range(20):
     #     for k, v in tags.items():
     #         generate_doubleroom(k, i, v, mixed, "decoy")
@@ -984,9 +1052,57 @@ def run_doublerooms(mixed):
     # for i in range(20):
     #     for k, v in tags.items():
     #         generate_doubleroom(k, i, v, mixed, "triple")
-    for i in range(40):
+    for i in range(20):
         for k, v in tags.items():
             generate_doubleroom(k, i, v, mixed, "shifted")
+    # for i in range(20):
+    #     for k, v in tags.items():
+    #         generate_doubleroom(k, i, v, mixed, "cylinders")
+    # for i in range(20):
+    #     for k, v in tags.items():
+    #         generate_doubleroom(k, i, v, mixed, "alphabet")
+    # for i in range(20):
+    #     for k, v in tags.items():
+    #         generate_doubleroom(k, i, v, mixed, "drilledfloor")
+    # for i in range(20):
+    #     for k, v in tags.items():
+    #         generate_doubleroom(k, i, v, mixed, "smalltriple")
+    # for i in range(40):
+    #     for k, v in tags.items():
+    #         generate_doubleroom(k, i, v, mixed, "alphabetoverlap")
+    # for i in range(20):
+    #     for k, v in tags.items():
+    #         generate_doubleroom(k, i, v, mixed, "bigerosion")
+    # for i in range(1):
+    #     for k, v in tags.items():
+    #         generate_doubleroom(k, i, v, mixed, "entrance")
+    # for i in range(1):
+    #     for k, v in tags.items():
+    #         generate_doubleroom(k, i, v, mixed, "noise")
+    # for i in range(20):
+    #     for k, v in tags.items():
+    #         generate_doubleroom(k, i, v, mixed, "uppertunnel")
+    # for i in range(1):
+    #     for k, v in tags.items():
+    #         generate_doubleroom(k, i, v, mixed, "stripe")
+    # for i in range(1):
+    #     for k, v in tags.items():
+    #         generate_doubleroom(k, i, v, mixed, "worm")
+    # for i in range(20):
+    #     for k, v in tags.items():
+    #         generate_doubleroom(k, i, v, mixed, "bridges")
+    # for i in range(20):
+    #     for k, v in tags.items():
+    #         generate_doubleroom(k, i, v, mixed, "devanagari")
+    # for i in range(20):
+    #     for k, v in tags.items():
+    #         generate_doubleroom(k, i, v, mixed, "math_simple")
+    # for i in range(20):
+    #     for k, v in tags.items():
+    #         generate_doubleroom(k, i, v, mixed, "math_drop")
+    # for i in range(20):
+    #     for k, v in tags.items():
+    #         generate_doubleroom(k, i, v, mixed, "math_double")
 
 
 def generate_room_graph(spheres):
@@ -1025,7 +1141,7 @@ def make_overlap_room(a2, b2):
         ]
     else:
         axis = (0, 0, 0)
-        while axis == (0, 0, 0):
+        while axis == (0, 0, 0) or axis == (0, 0, 1):
             axis = (
                 random.choice([0, 1]),
                 random.choice([0, 1]),
@@ -1048,7 +1164,7 @@ def generate_doubleroom(tag, room_num, size, mixed, room_type):
         # print(method)
         method = "automaton"
         verticality = random.choice(["up", "down", "flat", "heightmap"])
-        verticality = random.choice(["flat", "heightmap"])
+        # verticality = random.choice(["flat", "heightmap"])
         # automaton_size = random.choice([15, 22, 30])
         automaton_size = 15
         while True:
@@ -1090,7 +1206,7 @@ def generate_doubleroom(tag, room_num, size, mixed, room_type):
 
     overlap_1 = random.choice([True, False])
     overlap_2 = random.choice([True, False])
-    overlap_1, overlap_2 = False, False
+    overlap_1, overlap_2 = True, True
     if overlap_1:
         path1, circles1, graph1, *_ = make_one_room()
         path2, circles2, graph2, *_ = make_one_room()
@@ -2136,7 +2252,12 @@ def generate_doubleroom(tag, room_num, size, mixed, room_type):
             name = f"RMA_ICGEN_{tag.upper()}_BALLROOM{room_num}.json"
             room_name = f"{tag.upper()}_BALLROOM"
         case "erosion":
-            spheres, path = erosion_room(15, 500, method="erosion")
+            if tag == "small":
+                spheres, path = erosion_room(18, 500, method="erosion")
+            elif tag == "medium":
+                spheres, path = erosion_room(20, 500, method="erosion")
+            if tag == "big":
+                spheres, path = erosion_room(25, 500, method="erosion")
             spheres = [
                 {
                     "center": (float(s[0][0]), float(s[0][1]), float(s[0][2])),
@@ -2144,7 +2265,12 @@ def generate_doubleroom(tag, room_num, size, mixed, room_type):
                 }
                 for s in spheres
             ]
-            spheres = scale_spheres(spheres, 240)
+            if tag == "small":
+                spheres = scale_spheres(spheres, 100)
+            elif tag == "medium":
+                spheres = scale_spheres(spheres, 120)
+            if tag == "big":
+                spheres = scale_spheres(spheres, 140)
             spheres = shift_room(spheres, (0, 0, 0))
             graph = defaultdict(list)
             for i, sphere_i in enumerate(spheres):
@@ -2155,77 +2281,81 @@ def generate_doubleroom(tag, room_num, size, mixed, room_type):
             new_room = room
             traversal_paths = [path]
             pe = []
-            pillars = []
-            first_point = spheres[0]
-            second_point = spheres[-1]
-            first_entrances = generate_entrances(spheres, graph)
+            pillars = generate_pillars(spheres)
+            first_entrances = generate_entrances(spheres)
             second_entrances = []
-            # first_entrances = [
-            #     (
-            #         first_point["center"][0] - first_point["radius"],
-            #         first_point["center"][1],
-            #         first_point["center"][2] + 250,
-            #         0,
-            #         0,
-            #         180,
-            #         "Entrance",
-            #     )
-            # ]
-            # second_entrances = [
-            #     (
-            #         second_point["center"][0],
-            #         second_point["center"][1] + second_point["radius"],
-            #         second_point["center"][2] + 250,
-            #         0,
-            #         0,
-            #         90,
-            #         "Exit",
-            #     )
-            # ]
             name = f"RMA_ICGEN_{tag.upper()}_EROSIONROOM{room_num}.json"
             room_name = f"{tag.upper()}_EROSIONROOM"
-        case "decoy":
-            tunnel_length = random.randrange(1600, 3000)
-            tunnel_start, tunnel_end = (0, 0, 0), (0, 2 * tunnel_length, 0)
-            tunnel = quadratic_bezier_3d(
-                tunnel_start,
-                tunnel_end,
-                (
-                    -random.randrange(3000, 4500),
-                    tunnel_length,
-                    -random.uniform(-800, 800),
-                ),
-                n_points=10,
-            )
-            simple_rooms = [
+        case "bigerosion":
+            spheres, path = erosion_room(50, 500, method="erosion")
+            spheres = [
                 {
-                    "center": (tunnel_length * 0.6, tunnel_length * 0.1, 0),
-                    "radius": tunnel_length / 1.5,
-                },
-                {
-                    "center": (tunnel_length * 0.6, 1.8 * tunnel_length, 0),
-                    "radius": tunnel_length / 1.5,
-                },
+                    "center": (float(s[0][0]), float(s[0][1]), float(s[0][2])),
+                    "radius": s[1],
+                }
+                for s in spheres
             ]
-            tunnel = points_to_sphere(tunnel, random.randrange(400, 550))
-            shifted_room = shift_room(
-                a2, (tunnel_length * 0.6, tunnel_length, 0)
-            )
-            room = [tunnel] + [simple_rooms] + [shifted_room]
-            traversal_paths = [list(range(len(tunnel)))] + [[0, 1]] + [a1]
+            spheres = scale_spheres(spheres, 160)
+            spheres = shift_room(spheres, (0, 0, 0))
+            graph = defaultdict(list)
+            for i, sphere_i in enumerate(spheres):
+                for j, sphere_j in enumerate(spheres):
+                    if i != j and intersects(sphere_i, sphere_j):
+                        graph[i].append(j)
+            room = [spheres]
             new_room = room
-            first_entrances = generate_entrances(
-                [simple_rooms[0]],
-                return_type="Entrances",
-                entrance_interval=[220, 360],
-            ) + generate_entrances(
-                [simple_rooms[1]],
-                return_type="Entrances",
-                entrance_interval=[0, 60],
-            )
-            second_entrances = generate_entrances(
-                tunnel, return_type="Exits", exit_interval=[150, 260]
-            )
+            traversal_paths = [path]
+            pe = generate_PE_features(spheres)
+            pillars = generate_pillars(spheres)
+            first_entrances = generate_entrances(spheres)
+            second_entrances = []
+            name = f"RMA_ICGEN_{tag.upper()}_BIGEROSIONROOM{room_num}.json"
+            room_name = f"{tag.upper()}_BIGEROSIONROOM"
+        case "decoy":
+            from decoy import create_path
+
+            path = create_path(a2)
+            # tunnel_length = random.randrange(1600, 3000)
+            # tunnel_start, tunnel_end = (0, 0, 0), (0, 2 * tunnel_length, 0)
+            # tunnel = quadratic_bezier_3d(
+            #     tunnel_start,
+            #     tunnel_end,
+            #     (
+            #         -random.randrange(3000, 4500),
+            #         tunnel_length,
+            #         -random.uniform(-800, 800),
+            #     ),
+            #     n_points=10,
+            # )
+            # simple_rooms = [
+            #     {
+            #         "center": (tunnel_length * 0.6, tunnel_length * 0.1, 0),
+            #         "radius": tunnel_length / 1.5,
+            #     },
+            #     {
+            #         "center": (tunnel_length * 0.6, 1.8 * tunnel_length, 0),
+            #         "radius": tunnel_length / 1.5,
+            #     },
+            # ]
+            # tunnel = points_to_sphere(tunnel, random.randrange(400, 550))
+            # shifted_room = shift_room(
+            #     a2, (tunnel_length * 0.6, tunnel_length, 0)
+            # )
+            # room = [tunnel] + [simple_rooms] + [shifted_room]
+            # traversal_paths = [list(range(len(tunnel)))] + [[0, 1]] + [a1]
+            # new_room = room
+            # first_entrances = generate_entrances(
+            #     [simple_rooms[0]],
+            #     return_type="Entrances",
+            #     entrance_interval=[220, 360],
+            # ) + generate_entrances(
+            #     [simple_rooms[1]],
+            #     return_type="Entrances",
+            #     entrance_interval=[0, 60],
+            # )
+            # second_entrances = generate_entrances(
+            #     tunnel, return_type="Exits", exit_interval=[150, 260]
+            # )
             # second_point = tunnel[random.randrange(3, 8)]
             # first_point = max(
             #     simple_rooms + shifted_room,
@@ -2283,10 +2413,10 @@ def generate_doubleroom(tag, room_num, size, mixed, room_type):
             #         "Exit",
             #     )
             # ]
-            pillars = generate_pillars(simple_rooms) + generate_pillars(
-                shifted_room
-            )
-            pe = []
+            # pillars = generate_pillars(simple_rooms) + generate_pillars(
+            #     shifted_room
+            # )
+            # pe = []
             name = f"RMA_ICGEN_{tag.upper()}_DECOYROOM{room_num}.json"
             room_name = f"{tag.upper()}_DECOYROOM"
         case "links":
@@ -2447,6 +2577,8 @@ def generate_doubleroom(tag, room_num, size, mixed, room_type):
             perpendicular_vector = perpendicular_2d_normalized(
                 direction_vector
             )
+            a2 = scale_spheres(a2, 0.9)
+            b2 = scale_spheres(b2, 0.9)
             new_room = [a2]
             for ii in range(2):
                 axis = (0, 0, 0)
@@ -2473,19 +2605,978 @@ def generate_doubleroom(tag, room_num, size, mixed, room_type):
             pe = []
             name = f"RMA_ICGEN_{tag.upper()}_TRIPLEOVERLAPROOM{room_num}.json"
             room_name = f"{tag.upper()}_TRIPLEOVERLAPROOM"
+        case "smalltriple":
+            direction_vector = np.array(a2[-1]["center"]) - np.array(
+                a2[0]["center"]
+            )
+            perpendicular_vector = perpendicular_2d_normalized(
+                direction_vector
+            )
+            a2 = scale_spheres(a2, 0.75)
+            b2 = scale_spheres(b2, 0.75)
+            new_room = [a2]
+            traversal_paths = [a1]
+            for ii in range(2):
+                axis = (0, 0, 0)
+                while axis == (0, 0, 0):
+                    axis = (
+                        random.choice([0, 1]),
+                        random.choice([0, 1]),
+                        random.choice([0, 1]),
+                    )
+                theta = np.radians(random.uniform(50, 120))
+                R = rotation_matrix_axis_angle(axis, theta)
+                center_of_rotation = direction_vector / 2
+                a_copy = rotate_spheres(b2, center_of_rotation, R)
+                new_room += [a_copy]
+                d = find_intersection_or_closest(a2, a_copy)
+                traversal_paths += [b1]
+                if d["intersects"]:
+                    shaft = [
+                        {
+                            "center": d["pair"][0]["center"],
+                            "radius": d["pair"][0]["radius"],
+                        },
+                        {
+                            "center": d["pair"][1]["center"],
+                            "radius": d["pair"][1]["radius"],
+                        },
+                    ]
+                    traversal_paths += [[0, 1]]
+                    new_room += [shaft]
+            # Entrances:
+            first_entrances = [
+                b for b in generate_entrances(a2) if b[-1] == "Entrance"
+            ]
+            second_entrances = [
+                b for b in generate_entrances(a_copy) if b[-1] == "Exit"
+            ]
+            pillars = generate_pillars(a2) + generate_pillars(a_copy)
+            pe = []
+            name = f"RMA_ICGEN_{tag.upper()}_SMALLTRIPLE{room_num}.json"
+            room_name = f"{tag.upper()}_SMALLTRIPLE"
         case "shifted":
-            randomized_height = random.choice([0, 250, 500, -250, -500])
+            randomized_height = random.choice([500, 1000, -250, -500, -750])
+            b2 = apply_heightmap_to_spheres(b2)
             b2 = shift_room(b2, (500, 500, randomized_height))
-            b2 = scale_spheres(b2, 1.3)
-            a2 = scale_spheres(a2, 1.3)
-            new_room = [a2] + [b2]
-            traversal_paths = [a1] + [b1]
+            # For Refinery and Escort: scale = 1.3, also disable overlapping rooms and up/down verticality
+            if tag == "small":
+                a2 = scale_spheres(a2, 1)
+                b2 = scale_spheres(b2, 1)
+            elif tag == "medium":
+                a2 = scale_spheres(a2, 1)
+                b2 = scale_spheres(b2, 1)
+            if tag == "big":
+                a2 = scale_spheres(a2, 1.1)
+                b2 = scale_spheres(b2, 1.1)
+
+            d = find_intersection_or_closest(a2, b2)
+            if d["intersects"]:
+                new_room = [a2] + [b2]
+                traversal_paths = [a1] + [b1]
+            else:
+                connecting_shaft = [
+                    {
+                        "center": d["pair"][0]["center"],
+                        "radius": d["pair"][0]["radius"],
+                    },
+                    {
+                        "center": d["pair"][1]["center"],
+                        "radius": d["pair"][1]["radius"],
+                    },
+                ]
+                new_room = [a2] + [b2] + [connecting_shaft]
+                traversal_paths = [a1] + [b1] + [[1, 0]]
             first_entrances = generate_entrances(a2, return_type="Entrances")
-            second_entrances = generate_entrances(a2, return_type="Exits")
+            second_entrances = generate_entrances(b2, return_type="Exits")
             pillars = generate_pillars(a2) + generate_pillars(b2)
-            pe = generate_PE_features(a2)
-            name = f"RMA_ICGEN_{tag.upper()}_PEMINEHEAD{room_num}.json"
-            room_name = f"{tag.upper()}_PEMINEHEAD"
+            # pe = generate_PE_features(a2)
+            # if not pe:
+            # print("Empty PE")
+            pe = []
+            # name = f"RMA_ICGEN_{tag.upper()}_SHIFTED{room_num}.json"
+            # room_name = f"{tag.upper()}_SHIFTED"
+            name = f"RMA_ICGEN_{tag.upper()}_SHIFTED{room_num}.json"
+            room_name = f"{tag.upper()}_SHIFTED"
+        case "cylinders":
+            main_shaft_radius = random.randrange(400, 600)
+            main_shaft_height = -random.choice([800, 1200, 1600])
+            shafts = []
+            shafts += [
+                [
+                    {"center": (0, 0, 0), "radius": main_shaft_radius},
+                    {
+                        "center": (0, 0, main_shaft_height),
+                        "radius": main_shaft_radius,
+                    },
+                ]
+            ]
+            number_of_vertical_segments = random.choice([2, 3])
+            for _ in range(number_of_vertical_segments):
+                angles = random.randrange(0, 360)
+                previous_x, previous_y, previous_z = shafts[-1][-1]["center"]
+                new_hradius = shafts[-1][0]["radius"] * random.choice(
+                    [2.5, 3.2, 3.6]
+                )
+                new_radius = random.randrange(400, 600)
+                new_height = previous_z - random.choice([800, 1200, 1600])
+                shafts += [
+                    [
+                        {
+                            "center": (
+                                previous_x + math.cos(angles) * new_hradius,
+                                previous_y + math.sin(angles) * new_hradius,
+                                previous_z,
+                            ),
+                            "radius": new_radius,
+                        },
+                        {
+                            "center": (
+                                previous_x + math.cos(angles) * new_hradius,
+                                previous_y + math.sin(angles) * new_hradius,
+                                new_height,
+                            ),
+                            "radius": new_radius,
+                        },
+                    ]
+                ]
+            hallways = []
+            hallways += [
+                [
+                    {"center": (-500, 0, 0), "radius": 350},
+                    {"center": (0, 0, 0), "radius": 350},
+                ]
+            ]
+            for a, b in pairwise(shafts):
+                start_point, end_point = a[-1], b[0]
+                hallways += [
+                    [
+                        {"center": start_point["center"], "radius": 350},
+                        {"center": end_point["center"], "radius": 350},
+                    ]
+                ]
+
+            hallways += [
+                [
+                    {"center": shafts[-1][-1]["center"], "radius": 350},
+                    {"center": shafts[-1][-1]["center"], "radius": 350},
+                ]
+            ]
+            new_room = shafts + hallways
+            traversal_paths = [[0, 1]] * (len(shafts) + len(hallways))
+            pillars = []
+            for s in shafts:
+                pillars += generate_pillars(s)
+            pe = []
+            first_entrances = generate_entrances(
+                hallways[0], return_type="Entrances"
+            )
+            second_entrances = generate_entrances(
+                hallways[-1], return_type="Exits"
+            )
+            name = f"RMA_ICGEN_{tag.upper()}_CYLINDERS{room_num}.json"
+            room_name = f"{tag.upper()}_CYLINDERS"
+        case "alphabet":
+
+            # rotated = random.choice([True, False])
+            rotated = True
+
+            def group_lowest_z(spheres):
+                return min(s["center"][2] - s["radius"] for s in spheres)
+
+            def lowest_group(S1, S2):
+                z1 = group_lowest_z(S1)
+                z2 = group_lowest_z(S2)
+
+                if z1 < z2:
+                    return "S1", z1
+                elif z2 < z1:
+                    return "S2", z2
+                else:
+                    return "tie", z1
+
+            def random_character():
+                chars = (
+                    string.ascii_uppercase
+                    + string.ascii_lowercase
+                    + string.digits
+                )
+
+                return random.choice(chars)
+
+            def make_letter_room(letter):
+                points, path = assemble_letter(letter)
+                points = [(int(p1), int(p2)) for p1, p2 in points]
+                points = points_2d_to_shape(points, 23, lambda x, y, z: 0)
+                points = shift_room(points, (0, 0, 0))
+                points = scale_spheres(points, 35)
+                return points, path
+
+            points_1, path_1 = make_letter_room(random_character())
+            points_2, path_2 = make_letter_room(random_character())
+            points_1 = [{**d, "height": 1000} for d in points_1]
+            points_2 = [{**d, "height": 1000} for d in points_2]
+
+            # center_point = compute_room_center([p["center"] for p in points_1])
+            # points_2 = shift_room(
+            #     points_2,
+            #     (
+            #         center_point[0],
+            #         center_point[1],
+            #         randomized_height,
+            #     ),
+            # )
+            if rotated:
+                direction_vector = np.array(points_1[-1]["center"]) - np.array(
+                    points_1[0]["center"]
+                )
+                perpendicular_vector = perpendicular_2d_normalized(
+                    direction_vector
+                )
+                axis = (0, 0, 0)
+                while axis == (0, 0, 0) or axis == (0, 0, 1):
+                    axis = (
+                        random.choice([0, 1]),
+                        random.choice([0, 1]),
+                        random.choice([0, 1]),
+                    )
+                theta = np.radians(random.uniform(20, 50))
+                R = rotation_matrix_axis_angle(axis, theta)
+                center_of_rotation = direction_vector / 2
+                points_2 = rotate_spheres(points_2, center_of_rotation, R)
+
+            d = find_intersection_or_closest(points_1, points_2)
+            print("intersects:", d["intersects"])
+
+            if d["intersects"]:
+                new_room = [points_1] + [points_2]
+                traversal_paths = [path_1] + [path_2]
+            else:
+                connecting_shaft = [
+                    {
+                        "center": d["pair"][0]["center"],
+                        "radius": d["pair"][0]["radius"],
+                    },
+                    {
+                        "center": d["pair"][1]["center"],
+                        "radius": d["pair"][1]["radius"],
+                    },
+                ]
+                new_room = [points_1] + [points_2] + [connecting_shaft]
+                traversal_paths = [path_1] + [path_2] + [[1, 0]]
+            if lowest_group(points_1, points_2) == "S1":
+                first_entrances = generate_entrances(
+                    points_1, return_type="Entrances"
+                )
+                second_entrances = generate_entrances(
+                    points_2, return_type="Exits"
+                )
+            else:
+                first_entrances = generate_entrances(
+                    points_1, return_type="Exits"
+                )
+                second_entrances = generate_entrances(
+                    points_2, return_type="Entrances"
+                )
+            pillars = generate_pillars(points_1) + generate_pillars(points_2)
+            pe = []
+            name = f"RMA_ICGEN_{tag.upper()}_ALPHABET{room_num}.json"
+            room_name = f"{tag.upper()}_ALPHABET"
+        case "drilledfloor":
+            shafts = []
+            randomized_height = random.randrange(1800, 2200)
+            hole_size = random.randrange(300, 400)
+            for sphere in a2:
+                shafts += [
+                    [
+                        {
+                            "center": sphere["center"],
+                            "radius": hole_size,
+                        },
+                        {
+                            "center": (
+                                sphere["center"][0],
+                                sphere["center"][1],
+                                -randomized_height,
+                            ),
+                            "radius": hole_size,
+                        },
+                    ]
+                ]
+
+            shaft_positions = [p[-1] for p in shafts]
+            new_room = [a2] + shafts + [shaft_positions]
+            traversal_paths = (
+                [a1]
+                + [[0, 1]] * len(shafts)
+                + [list(range(len(shaft_positions)))]
+            )
+            first_entrances = generate_entrances(
+                [p[-1] for p in shafts], return_type="Exits"
+            )
+            second_entrances = generate_entrances(a2, return_type="Entrances")
+            pe = []
+            pillars = generate_pillars(a2)
+            name = f"RMA_ICGEN_{tag.upper()}_DRILLEDFLOOR{room_num}.json"
+            room_name = f"{tag.upper()}_DRILLED_FLOOR"
+
+        case "alphabetoverlap":
+            # rotated = random.choice([True, False])
+            rotated = True
+
+            def group_lowest_z(spheres):
+                return min(s["center"][2] - s["radius"] for s in spheres)
+
+            def lowest_group(S1, S2):
+                z1 = group_lowest_z(S1)
+                z2 = group_lowest_z(S2)
+
+                if z1 < z2:
+                    return "S1", z1
+                elif z2 < z1:
+                    return "S2", z2
+                else:
+                    return "tie", z1
+
+            def random_character():
+                chars = (
+                    string.ascii_uppercase
+                    + string.ascii_lowercase
+                    + string.digits
+                )
+
+                return random.choice(chars)
+
+            def make_letter_room(letter, size):
+                points, path = assemble_letter(letter)
+                points = [(int(p1), int(p2)) for p1, p2 in points]
+                points = points_2d_to_shape(points, 23, lambda x, y, z: 0)
+                points = shift_room(points, (0, 0, 0))
+                points = scale_spheres(points, size)
+                return points, path
+
+            if tag == "small":
+                points_1, path_1 = scale_spheres(a2, 1.0), a1
+                points_2, path_2 = make_letter_room(random_character(), 30)
+            elif tag == "medium":
+                points_1, path_1 = scale_spheres(a2, 1.1), a1
+                points_2, path_2 = make_letter_room(random_character(), 34)
+            if tag == "big":
+                points_1, path_1 = scale_spheres(a2, 1.1), a1
+                points_2, path_2 = make_letter_room(random_character(), 38)
+
+            # center_point = compute_room_center([p["center"] for p in points_1])
+            # points_2 = shift_room(
+            #     points_2,
+            #     (
+            #         center_point[0],
+            #         center_point[1],
+            #         randomized_height,
+            #     ),
+            # )
+            if rotated:
+                direction_vector = np.array(points_1[-1]["center"]) - np.array(
+                    points_1[0]["center"]
+                )
+                perpendicular_vector = perpendicular_2d_normalized(
+                    direction_vector
+                )
+                axis = (0, 0, 0)
+                while axis == (0, 0, 0) or axis == (0, 0, 1):
+                    axis = (
+                        random.choice([0, 1]),
+                        random.choice([0, 1]),
+                        random.choice([0, 1]),
+                    )
+                theta = np.radians(random.uniform(20, 50))
+                R = rotation_matrix_axis_angle(axis, theta)
+                center_of_rotation = direction_vector / 2
+                points_2 = rotate_spheres(points_2, center_of_rotation, R)
+
+            d = find_intersection_or_closest(points_1, points_2)
+            print("intersects:", d["intersects"])
+
+            if d["intersects"]:
+                new_room = [points_1] + [points_2]
+                traversal_paths = [path_1] + [path_2]
+            else:
+                connecting_shaft = [
+                    {
+                        "center": d["pair"][0]["center"],
+                        "radius": d["pair"][0]["radius"],
+                    },
+                    {
+                        "center": d["pair"][1]["center"],
+                        "radius": d["pair"][1]["radius"],
+                    },
+                ]
+                new_room = [points_1] + [points_2] + [connecting_shaft]
+                traversal_paths = [path_1] + [path_2] + [[1, 0]]
+            if lowest_group(points_1, points_2) == "S1":
+                first_entrances = generate_entrances(
+                    points_1, return_type="Entrances"
+                )
+                second_entrances = generate_entrances(
+                    points_2, return_type="Exits"
+                )
+            else:
+                first_entrances = generate_entrances(
+                    points_1, return_type="Exits"
+                )
+                second_entrances = generate_entrances(
+                    points_2, return_type="Entrances"
+                )
+            pillars = generate_pillars(points_1) + generate_pillars(points_2)
+            pe = []
+            name = f"RMA_ICGEN_{tag.upper()}_ALPHABETOVERLAP{room_num}.json"
+            room_name = f"{tag.upper()}_ALPHABETOVERLAP"
+        case "entrance":
+            x, y, z, _, _, angle, _ = generate_entrances(a2)[-1]
+            # angle = (angle + 180) % 360
+            second_shaft = (
+                x,
+                y,
+                random.choice([1, -1]) * 2500,
+            )
+            shaft = [
+                {"center": (x, y, z), "radius": 1000},
+                {
+                    "center": second_shaft,
+                    "radius": 1000,
+                },
+            ]
+            room = [a2] + [shaft]
+            new_room = room
+            traversal_paths = [a1] + [[0, 1]]
+            first_entrances = generate_entrances(a2, return_type="Exits")
+            second_entrances = generate_entrances(
+                [shaft[1], shaft[1]], return_type="Entrances"
+            )
+            pillars = generate_pillars(a2) + generate_pillars(shaft)
+            pe = []
+            name = f"RMA_ICGEN_{tag.upper()}_ENTRANCEROOM{room_num}.json"
+            room_name = f"{tag.upper()}_ENTRANCEROOM"
+        case "noise":
+            from noise3d_2 import create_noise_room
+
+            spheres, path = create_noise_room()
+            spheres = [
+                {
+                    "center": (float(s[0][0]), float(s[0][1]), float(s[0][2])),
+                    "radius": s[1],
+                }
+                for s in spheres
+            ]
+            if tag == "small":
+                spheres = scale_spheres(spheres, 300)
+            elif tag == "medium":
+                spheres = scale_spheres(spheres, 320)
+            if tag == "big":
+                spheres = scale_spheres(spheres, 340)
+            spheres = shift_room(spheres, (0, 0, 0))
+            room = [spheres]
+            new_room = room
+            traversal_paths = [path]
+            pe = []
+            pillars = generate_pillars(spheres)
+            first_entrances = generate_entrances(spheres)
+            second_entrances = []
+            name = f"RMA_ICGEN_{tag.upper()}_NOISEROOM{room_num}.json"
+            room_name = f"{tag.upper()}_NOISEROOM"
+        case "worm":
+            from worms import generate_3d_worm_cave
+
+            if tag == "small":
+                spheres, path = generate_3d_worm_cave(num_worms=2)
+            elif tag == "medium":
+                spheres, path = generate_3d_worm_cave(num_worms=3)
+            if tag == "big":
+                spheres, path = generate_3d_worm_cave(num_worms=3)
+            spheres = [
+                {
+                    "center": (float(s[0][0]), float(s[0][1]), float(s[0][2])),
+                    "radius": s[1],
+                }
+                for s in spheres
+            ]
+            if tag == "small":
+                spheres = scale_spheres(spheres, 50)
+            elif tag == "medium":
+                spheres = scale_spheres(spheres, 60)
+            if tag == "big":
+                spheres = scale_spheres(spheres, 70)
+            spheres = shift_room(spheres, (0, 0, 0))
+            room = [spheres]
+            new_room = room
+            traversal_paths = [path]
+            pe = []
+            pillars = generate_pillars(spheres)
+            first_entrances = generate_entrances(spheres)
+            second_entrances = []
+            name = f"RMA_ICGEN_{tag.upper()}_WORMROOM{room_num}.json"
+            room_name = f"{tag.upper()}_WORMROOM"
+        case "uppertunnel":
+            from noise3d import create_noise_room
+
+            spheres, path = create_noise_room(True)
+            spheres = [
+                {
+                    "center": (float(s[0][0]), float(s[0][1]), float(s[0][2])),
+                    "radius": s[1],
+                }
+                for s in spheres
+            ]
+            if tag == "small":
+                spheres = scale_spheres(spheres, 50)
+            elif tag == "medium":
+                spheres = scale_spheres(spheres, 70)
+            if tag == "big":
+                spheres = scale_spheres(spheres, 90)
+            spheres = shift_room(spheres, (0, 0, 0))
+            room = [spheres]
+            new_room = room
+            traversal_paths = [path]
+            pe = []
+            pillars = generate_pillars(spheres)
+            first_entrances = generate_entrances(spheres)
+            second_entrances = []
+            name = f"RMA_ICGEN_{tag.upper()}_UPPERTUNNEL{room_num}.json"
+            room_name = f"{tag.upper()}_UPPERTUNNEL"
+        case "stripe":
+            from noise3d import create_noise_room
+
+            spheres, path = create_noise_room(False)
+            spheres = [
+                {
+                    "center": (float(s[0][0]), float(s[0][1]), float(s[0][2])),
+                    "radius": s[1],
+                }
+                for s in spheres
+            ]
+
+            if tag == "small":
+                spheres = scale_spheres(spheres, 90)
+            elif tag == "medium":
+                spheres = scale_spheres(spheres, 110)
+            if tag == "big":
+                spheres = scale_spheres(spheres, 120)
+            spheres = shift_room(spheres, (0, 0, 0))
+            room = [spheres]
+            new_room = room
+            traversal_paths = [path]
+            pe = []
+            pillars = generate_pillars(spheres)
+            first_entrances = generate_entrances(spheres)
+            second_entrances = []
+            name = f"RMA_ICGEN_{tag.upper()}_STRIPEROOM{room_num}.json"
+            room_name = f"{tag.upper()}_STRIPEROOM"
+        case "devanagari":
+            # rotated = random.choice([True, False])
+            rotated = True
+
+            def random_character():
+                return list(range(0x0904, 0x0939))
+
+            def make_letter_room(letter):
+                letter = chr(letter)
+                points, path = assemble_letter_devanagari(letter)
+                points = [(int(p1), int(p2)) for p1, p2 in points]
+                points = points_2d_to_shape(points, 23, lambda x, y, z: 0)
+                points = shift_room(points, (0, 0, 0))
+                if tag == "small":
+                    points = scale_spheres(points, 28)
+                elif tag == "medium":
+                    points = scale_spheres(points, 35)
+                if tag == "big":
+                    points = scale_spheres(points, 40)
+                return points, path
+
+            points_1, path_1 = make_letter_room(random_character()[room_num])
+            points_1 = [{**d, "height": 1000} for d in points_1]
+
+            if rotated:
+                direction_vector = np.array(points_1[-1]["center"]) - np.array(
+                    points_1[0]["center"]
+                )
+                perpendicular_vector = perpendicular_2d_normalized(
+                    direction_vector
+                )
+                axis = (0, 0, 0)
+                while axis == (0, 0, 0) or axis == (0, 0, 1):
+                    axis = (
+                        random.choice([0, 1]),
+                        random.choice([0, 1]),
+                        random.choice([0, 1]),
+                    )
+                theta = np.radians(random.uniform(20, 50))
+                R = rotation_matrix_axis_angle(axis, theta)
+                center_of_rotation = direction_vector / 2
+                points_1 = rotate_spheres(points_1, center_of_rotation, R)
+
+            new_room = [points_1]
+            traversal_paths = [path_1]
+            first_entrances = generate_entrances(
+                points_1,
+                return_type="Entrances",
+                entrance_interval=(45, 145),
+            )
+            second_entrances = generate_entrances(
+                points_1,
+                return_type="Exits",
+                exit_interval=(200, 300),
+            )
+            pillars = generate_pillars(points_1)
+            pe = []
+            name = f"RMA_ICGEN_{tag.upper()}_DEVANAGARIROOM{room_num}.json"
+            room_name = f"{tag.upper()}_DEVANAGARIROOM"
+        case "bridges":
+            # rotated = random.choice([True, False])
+            rotated = True
+
+            def random_character():
+                return list(range(0x0904, 0x0939))
+
+            def make_letter_room(letter):
+                letter = chr(letter)
+                points, path = assemble_letter_devanagari(letter)
+                points = [(int(p1), int(p2)) for p1, p2 in points]
+                points = points_2d_to_shape(points, 23, lambda x, y, z: 0)
+                points = shift_room(points, (0, 0, 0))
+                if tag == "small":
+                    points = scale_spheres(points, 28)
+                elif tag == "medium":
+                    points = scale_spheres(points, 35)
+                if tag == "big":
+                    points = scale_spheres(points, 45)
+                return points, path
+
+            points_1, path_1 = make_letter_room(random_character()[room_num])
+            points_1 = [{**d, "height": 1000} for d in points_1]
+
+            if rotated:
+                direction_vector = np.array(points_1[-1]["center"]) - np.array(
+                    points_1[0]["center"]
+                )
+                perpendicular_vector = perpendicular_2d_normalized(
+                    direction_vector
+                )
+                axis = (0, 0, 0)
+                while axis == (0, 0, 0) or axis == (0, 0, 1):
+                    axis = (
+                        random.choice([0, 1]),
+                        random.choice([0, 1]),
+                        random.choice([0, 1]),
+                    )
+                theta = np.radians(random.uniform(20, 50))
+                R = rotation_matrix_axis_angle(axis, theta)
+                center_of_rotation = direction_vector / 2
+                points_1 = rotate_spheres(points_1, center_of_rotation, R)
+
+            points_2 = [
+                {
+                    **d,
+                    "height": 1000,
+                    "center": (
+                        d["center"][0],
+                        d["center"][1],
+                        d["center"][2] + 700,
+                    ),
+                }
+                for d in points_1
+            ]
+            new_room = [points_1] + [points_2]
+            traversal_paths = [path_1] + [path_1]
+            first_entrances = generate_entrances(
+                points_2,
+                return_type="Entrances",
+                entrance_interval=(45, 145),
+            )
+            second_entrances = generate_entrances(
+                points_1,
+                return_type="Exits",
+                exit_interval=(200, 300),
+            )
+            pillars = generate_pillars(points_1)
+            pe = []
+            name = f"RMA_ICGEN_{tag.upper()}_BRIDGEROOM{room_num}.json"
+            room_name = f"{tag.upper()}_BRIDGEROOM"
+        case "math_simple":
+            rotated = random.choice([True, False])
+            print(rotated)
+            # rotated = True
+
+            def random_character():
+                return random.choice(
+                    list(range(0x2A00, 0x02AFF))
+                    + list(range(0x2200, 0x22FF))
+                    + list(range(0x1EE05, 0x1EE1F))
+                )
+
+            def make_letter_room(letter):
+                letter = chr(letter)
+                points, path = assemble_letter_math(letter)
+                points = [(int(p1), int(p2)) for p1, p2 in points]
+                points = points_2d_to_shape(points, 23, lambda x, y, z: 0)
+                points = shift_room(points, (0, 0, 0))
+                if tag == "small":
+                    points = scale_spheres(points, 28)
+                elif tag == "medium":
+                    points = scale_spheres(points, 35)
+                if tag == "big":
+                    points = scale_spheres(points, 42)
+                return points, path
+
+            points_1, path_1 = make_letter_room(random_character())
+            points_1 = [{**d, "height": 1000} for d in points_1]
+
+            if rotated:
+                direction_vector = np.array(points_1[-1]["center"]) - np.array(
+                    points_1[0]["center"]
+                )
+                perpendicular_vector = perpendicular_2d_normalized(
+                    direction_vector
+                )
+                axis = (0, 0, 0)
+                while axis == (0, 0, 0) or axis == (0, 0, 1):
+                    axis = (
+                        random.choice([0, 1]),
+                        random.choice([0, 1]),
+                        random.choice([0, 1]),
+                    )
+                theta = np.radians(random.uniform(20, 50))
+                R = rotation_matrix_axis_angle(axis, theta)
+                center_of_rotation = direction_vector / 2
+                points_1 = rotate_spheres(points_1, center_of_rotation, R)
+            else:
+                points_1 = apply_heightmap_to_spheres(points_1)
+
+            new_room = [points_1]
+            traversal_paths = [path_1]
+            first_entrances = generate_entrances(
+                points_1,
+                return_type="Entrances",
+                entrance_interval=(45, 145),
+            )
+            second_entrances = generate_entrances(
+                points_1,
+                return_type="Exits",
+                exit_interval=(200, 300),
+            )
+            pillars = generate_pillars(points_1)
+            pe = []
+            name = f"RMA_ICGEN_{tag.upper()}_MATHSIMPLE{room_num}.json"
+            room_name = f"{tag.upper()}_MATHSIMPLE"
+        case "math_drop":
+            # rotated = random.choice([True, False])
+            rotated = True
+
+            def random_character():
+                return random.choice(
+                    list(range(0x2A00, 0x02AFF))
+                    + list(range(0x2200, 0x22FF))
+                    + list(range(0x1EE05, 0x1EE1F))
+                )
+
+            def make_letter_room(letter):
+                print(letter)
+                letter = chr(letter)
+                points, path = assemble_letter_math(letter)
+                points = [(int(p1), int(p2)) for p1, p2 in points]
+                points = points_2d_to_shape(points, 23, lambda x, y, z: 0)
+                points = shift_room(points, (0, 0, 0))
+                if tag == "small":
+                    points = scale_spheres(points, 28)
+                elif tag == "medium":
+                    points = scale_spheres(points, 35)
+                if tag == "big":
+                    points = scale_spheres(points, 42)
+                return points, path
+
+            points_1, path_1 = make_letter_room(random_character())
+            points_left, points_right = return_half_disks(points_1)
+            points_2 = points_2d_to_shape(
+                points_left,
+                800,
+                lambda x, y, z: random.randrange(-3500, -2000),
+            )
+            points_right = points_2d_to_shape(
+                points_right, 800, lambda x, y, z: 0
+            )
+            points_1 = points_2 + points_right
+            points_1 = [{**d, "height": 1000} for d in points_1]
+
+            # if rotated:
+            #     direction_vector = np.array(points_1[-1]["center"]) - np.array(
+            #         points_1[0]["center"]
+            #     )
+            #     perpendicular_vector = perpendicular_2d_normalized(
+            #         direction_vector
+            #     )
+            #     axis = (0, 0, 0)
+            #     while axis == (0, 0, 0) or axis == (0, 0, 1):
+            #         axis = (
+            #             random.choice([0, 1]),
+            #             random.choice([0, 1]),
+            #             random.choice([0, 1]),
+            #         )
+            #     theta = np.radians(random.uniform(20, 50))
+            #     R = rotation_matrix_axis_angle(axis, theta)
+            #     center_of_rotation = direction_vector / 2
+            #     points_1 = rotate_spheres(points_1, center_of_rotation, R)
+
+            new_room = [points_1]
+            traversal_paths = [path_1]
+            direction_entrance = random.choice([False, True])
+            if direction_entrance:
+                first_entrances = generate_entrances(
+                    points_1,
+                    return_type="Entrances",
+                    entrance_interval=(45, 130),
+                )
+                second_entrances = generate_entrances(
+                    points_1,
+                    return_type="Exits",
+                    exit_interval=(200, 300),
+                )
+            else:
+                first_entrances = generate_entrances(
+                    points_1,
+                    return_type="Exits",
+                    entrance_interval=(45, 130),
+                )
+                second_entrances = generate_entrances(
+                    points_1,
+                    return_type="Entrances",
+                    exit_interval=(200, 300),
+                )
+            pillars = generate_pillars(points_1)
+            pe = []
+            name = f"RMA_ICGEN_{tag.upper()}_MATHDROP{room_num}.json"
+            room_name = f"{tag.upper()}_MATHDROP"
+        case "math_double":
+
+            def random_character():
+                chosen_character = []
+
+                while (
+                    not chosen_character
+                    or chosen_character == 10812
+                    or chosen_character == 8758
+                    or chosen_character == 8718
+                ):
+
+                    chosen_character = random.choice(
+                        list(range(0x2A00, 0x02AFF))
+                        + list(range(0x2200, 0x22FF))
+                        + list(range(0x1EE05, 0x1EE1F))
+                    )
+
+                return chosen_character
+
+            def make_letter_room(letter, size):
+                print(letter)
+                letter = chr(letter)
+                points, path = assemble_letter_math(letter)
+                points = [(int(p1), int(p2)) for p1, p2 in points]
+                points = points_2d_to_shape(points, 23, lambda x, y, z: 0)
+                points = shift_room(points, (0, 0, 0))
+                points = scale_spheres(points, size)
+                return points, path
+
+            # rotated = random.choice([True, False])
+            rotated = True
+
+            def group_lowest_z(spheres):
+                return min(s["center"][2] - s["radius"] for s in spheres)
+
+            def lowest_group(S1, S2):
+                z1 = group_lowest_z(S1)
+                z2 = group_lowest_z(S2)
+
+                if z1 < z2:
+                    return "S1", z1
+                elif z2 < z1:
+                    return "S2", z2
+                else:
+                    return "tie", z1
+
+            if tag == "small":
+                points_1, path_1 = make_letter_room(random_character(), 30)
+                points_2, path_2 = make_letter_room(random_character(), 30)
+            elif tag == "medium":
+                points_1, path_1 = make_letter_room(random_character(), 34)
+                points_2, path_2 = make_letter_room(random_character(), 34)
+            if tag == "big":
+                points_1, path_1 = make_letter_room(random_character(), 38)
+                points_2, path_2 = make_letter_room(random_character(), 38)
+
+            # center_point = compute_room_center([p["center"] for p in points_1])
+            # points_2 = shift_room(
+            #     points_2,
+            #     (
+            #         center_point[0],
+            #         center_point[1],
+            #         randomized_height,
+            #     ),
+            # )
+            if rotated:
+                direction_vector = np.array(points_1[-1]["center"]) - np.array(
+                    points_1[0]["center"]
+                )
+                perpendicular_vector = perpendicular_2d_normalized(
+                    direction_vector
+                )
+                axis = (0, 0, 0)
+                while axis == (0, 0, 0) or axis == (0, 0, 1):
+                    axis = (
+                        random.choice([0, 1]),
+                        random.choice([0, 1]),
+                        random.choice([0, 1]),
+                    )
+                theta = np.radians(random.uniform(20, 50))
+                R = rotation_matrix_axis_angle(axis, theta)
+                center_of_rotation = direction_vector / 2
+                points_2 = rotate_spheres(points_2, center_of_rotation, R)
+
+            points_1 = apply_heightmap_to_spheres(points_1)
+
+            d = find_intersection_or_closest(points_1, points_2)
+            print("intersects:", d["intersects"])
+
+            if d["intersects"]:
+                new_room = [points_1] + [points_2]
+                traversal_paths = [path_1] + [path_2]
+            else:
+                connecting_shaft = [
+                    {
+                        "center": d["pair"][0]["center"],
+                        "radius": d["pair"][0]["radius"],
+                    },
+                    {
+                        "center": d["pair"][1]["center"],
+                        "radius": d["pair"][1]["radius"],
+                    },
+                ]
+                new_room = [points_1] + [points_2] + [connecting_shaft]
+                traversal_paths = [path_1] + [path_2] + [[1, 0]]
+            if lowest_group(points_1, points_2) == "S1":
+                first_entrances = generate_entrances(
+                    points_1, return_type="Entrances"
+                )
+                second_entrances = generate_entrances(
+                    points_2, return_type="Exits"
+                )
+            else:
+                first_entrances = generate_entrances(
+                    points_1, return_type="Exits"
+                )
+                second_entrances = generate_entrances(
+                    points_2, return_type="Entrances"
+                )
+            pillars = generate_pillars(points_1) + generate_pillars(points_2)
+            pe = []
+            name = f"RMA_ICGEN_{tag.upper()}_MATHDOUBLE{room_num}.json"
+            room_name = f"{tag.upper()}_MATHDOUBLE"
 
     if not mixed:
         tags = {
@@ -2540,6 +3631,57 @@ def generate_doubleroom(tag, room_num, size, mixed, room_type):
         logging.info(f"Written {name} to generated/{name}, method: doubleroom")
     except Exception as e:
         logging.error(f"Couldn't write {name}: {e}")
+
+
+def center_distance(c1, c2):
+    return math.sqrt(
+        (c1[0] - c2[0]) ** 2 + (c1[1] - c2[1]) ** 2 + (c1[2] - c2[2]) ** 2
+    )
+
+
+def find_intersection_or_closest(S1, S2):
+    """
+    S1, S2: lists of dicts
+        {"center": (x, y, z), "radius": r}
+
+    Returns:
+        {
+            "intersects": bool,
+            "pair": (sphere1, sphere2),
+            "distance": gap
+        }
+    """
+
+    closest_pair = None
+    min_gap = float("inf")
+
+    for s1 in S1:
+        c1, r1 = s1["center"], s1["radius"]
+
+        for s2 in S2:
+            c2, r2 = s2["center"], s2["radius"]
+
+            d = center_distance(c1, c2)
+            gap = d - (r1 + r2)
+
+            # Intersection found
+            if gap <= 0:
+                return {
+                    "intersects": True,
+                    "pair": (s1, s2),
+                    "distance": gap,
+                }
+
+            # Track closest non-intersecting pair
+            if gap < min_gap:
+                min_gap = gap
+                closest_pair = (s1, s2)
+
+    return {
+        "intersects": False,
+        "pair": closest_pair,
+        "distance": min_gap,
+    }
 
 
 def compute_midpoint(p1, p2):
@@ -2599,6 +3741,36 @@ def generate_lindenmayer_base():
         base[node].append(new_node)
     base.append([(0, i) for i in range(len(base))])
     return base
+
+
+def compute_room_center(points):
+    """
+    Compute the geometric center (centroid) of a set of 3D points.
+
+    Args:
+        points: Iterable of (x, y, z) tuples.
+
+    Returns:
+        A tuple (cx, cy, cz) representing the center point.
+
+    Raises:
+        ValueError: If no points are provided.
+    """
+    points = list(points)
+
+    if not points:
+        raise ValueError("At least one point is required.")
+
+    sx = sy = sz = 0.0
+
+    for x, y, z in points:
+        sx += x
+        sy += y
+        sz += z
+
+    n = len(points)
+
+    return (sx / n, sy / n, sz / n)
 
 
 def generate_l_rooms(mixed):

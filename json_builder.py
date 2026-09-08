@@ -98,18 +98,13 @@ def is_point_in_disk(px, py, cx, cy, r):
 
 def generate_PE_features(circles):
     # For PE we choose a few circles at random and put the minehead there.
-    number_of_mineheads = random.randrange(3, 6) if len(circles) > 4 else 1
-    # chosen_circles = random.choices(range(len(circles)), k=number_of_mineheads)
-    chosen_circles = sorted(circles, key=lambda x: x["radius"], reverse=True)[
-        :number_of_mineheads
-    ]
     return [
         (
             circle["center"][0],
             circle["center"][1],
             circle["center"][2] + 200,
         )
-        for circle in chosen_circles
+        for circle in circles
         if not is_point_in_disk(
             0, 0, circle["center"][0], circle["center"][1], circle["radius"]
         )
@@ -273,6 +268,24 @@ def generate_exit_w_vector(circles, point, vector):
 #     return entrances
 
 
+def xy_center(spheres):
+    """
+    Returns the geometric center of a group of spheres
+    ignoring the Z coordinate.
+
+    Output: (x_center, y_center)
+    """
+    if not spheres:
+        raise ValueError("Sphere group is empty")
+
+    n = len(spheres)
+
+    x = sum(s["center"][0] for s in spheres) / n
+    y = sum(s["center"][1] for s in spheres) / n
+
+    return (x, y)
+
+
 def center_of_mass(disks):
     """
     disks: dict like {key: {"center": (x, y), "radius": r}, ...}
@@ -367,6 +380,58 @@ def last_disk_intersections(disks, center, angle_step):
     return results
 
 
+def furthest_spheres(spheres, point, n=3):
+    """
+    Return the n spheres furthest from a 3D point.
+
+    Each sphere should be a dict like:
+        {"center": (x, y, z), "radius": r}
+
+    Distance is measured from the point to the sphere's surface.
+    """
+
+    def distance_to_sphere(sphere):
+        center = sphere["center"]
+        radius = sphere["radius"]
+
+        dx = point[0] - center[0]
+        dy = point[1] - center[1]
+        dz = point[2] - center[2]
+
+        center_distance = math.sqrt(dx * dx + dy * dy + dz * dz)
+        return center_distance - radius
+
+    return sorted(spheres, key=distance_to_sphere, reverse=True)[:n]
+
+
+def generate_exits_furthest(circles, entrances):
+
+    room_center = xy_center(circles)
+    exits = []
+    for entrance in entrances:
+        entrance_location = (entrance[0], entrance[1], entrance[2])
+        candidates = furthest_spheres(circles, entrance_location)
+        for candidate in candidates:
+            exit_point = np.array(
+                [candidate["center"][0], candidate["center"][1]]
+            ) - np.array(room_center)
+            exit_point = (exit_point[0], exit_point[1], candidate["center"][2])
+            exits.append(
+                (
+                    exit_point[0],
+                    exit_point[1],
+                    candidate["center"][2]
+                    + candidate["radius"] * 0.2
+                    + candidate.get("floor_depth", 0) * 0.8,
+                    0,
+                    0,
+                    90,
+                    "Exit",
+                )
+            )
+    return exits
+
+
 def generate_entrances(
     circles,
     entrance_interval=(200, 360),
@@ -377,7 +442,7 @@ def generate_entrances(
 
     entrances = []
     exits = []
-    room_center = center_of_mass(circles)
+    room_center = xy_center(circles)
     valid_entry_points = [
         e
         for e in last_disk_intersections(
@@ -502,25 +567,32 @@ def generate_pillars(circles, method=None, height_mult=1):
     """
     Here we generate some random pillars, not too many, just for added decoration.
     """
-    pillar_method = (
-        random.choice(["stalactite", "stalagmite", "straight", "balls"])
-        if method is None
-        else method
-    )
-    print(pillar_method)
     pillars = []
     # number_of_pillars = (
     #     random.randrange(5) if len(circles) > 4 else len(circles) - 1
     # )
     suitable_circles = sorted(
         circles, key=lambda x: x["radius"], reverse=True
-    )[:3]
+    )[: math.ceil(len(circles) * 0.15)]
 
-    match pillar_method:
-        case "balls":
-            for c in suitable_circles:
-                BALL_RADIUS = min(500, random.uniform(300, c["radius"] * 0.5))
-                print(BALL_RADIUS)
+    for c in suitable_circles:
+        pillar_method = (
+            random.choice(
+                [
+                    "stalactite",
+                    "stalagmite",
+                    "straight",
+                    "balls",
+                ]
+            )
+            if method is None
+            else method
+        )
+        match pillar_method:
+            case "balls":
+                if c["radius"] < 400:
+                    continue
+                BALL_RADIUS = min(500, random.uniform(300, c["radius"] * 0.3))
                 x, y, z = sample_point_in_disk(c)
                 pillars.append(
                     [
@@ -536,8 +608,35 @@ def generate_pillars(circles, method=None, height_mult=1):
                         },
                     ]
                 )
-        case "straight":
-            for c in suitable_circles:
+            case "asymmetric_ball":
+                if c["radius"] < 400:
+                    continue
+                BALL_RADIUS = min(500, random.uniform(300, c["radius"] * 0.3))
+                x, y, z = sample_point_in_disk(c)
+                pillars.append(
+                    [
+                        {
+                            "Location": (x, y, z + 300),
+                            "Range": BALL_RADIUS,
+                            "NoiseRange": 100,
+                        },
+                        {
+                            "Location": (x, y + 250, z + 300),
+                            "Range": BALL_RADIUS,
+                            "NoiseRange": 100,
+                        },
+                        {
+                            "Location": (
+                                x,
+                                y + 250,
+                                z + 300 + random.randint(100, 300),
+                            ),
+                            "Range": BALL_RADIUS,
+                            "NoiseRange": 100,
+                        },
+                    ]
+                )
+            case "straight":
                 if c["radius"] < 400:
                     continue
                 x, y, _ = sample_point_in_disk(c)
@@ -564,10 +663,9 @@ def generate_pillars(circles, method=None, height_mult=1):
                         },
                     ]
                 )
-        case "none":
-            pass
-        case "stalagmite":
-            for c in suitable_circles:
+            case "none":
+                pass
+            case "stalagmite":
                 if c["radius"] < 400:
                     continue
                 x, y, _ = sample_point_in_disk(c)
@@ -589,8 +687,7 @@ def generate_pillars(circles, method=None, height_mult=1):
                         for h, t in zip(heights, thickness)
                     ]
                 )
-        case "stalactite":
-            for c in suitable_circles:
+            case "stalactite":
                 if c["radius"] < 400:
                     continue
                 x, y, _ = sample_point_in_disk(c)

@@ -12,7 +12,7 @@
     ]
   },
   "MEDIUM": {
-    "max_cube_vol": 2500,
+    "max_cube_vol": 3500,
     "bounds": 3500,
     "inverted": false,
     "PE": false,
@@ -171,7 +171,7 @@
     "size": 20,
     "randomize_size": false,
     "tags": [
-      "BigEgg.Linear.Small"
+      "Rooms.Linear.CustomMedium"
     ]
   },
   "PE": {
