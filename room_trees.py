@@ -7,6 +7,7 @@ import string
 import numpy as np
 from more_itertools import flatten
 from worms import generate_3d_worm_cave_parameterized, generate_3d_worm_cave
+from scipy.ndimage import gaussian_filter, map_coordinates, zoom
 from heightmap import apply_heightmap_to_spheres
 from main import (
     create_room,
@@ -46,9 +47,9 @@ from json_builder import (
 )
 
 # Normal dictionary:
-ROOMS = "ABCDEUVPRWXZa"
+ROOMS = "ABCDEUVPRWXZabcd"
 # ROOMS = "a"
-TRANSFORMS = ""
+TRANSFORMS = "L"
 MODIFIERS = "IJQSK"
 COMBINERS = "OTY"
 
@@ -60,12 +61,10 @@ REQUIRED_MODIFIERS = {
     "P": "JIQSK",
 }
 # # Refinery / Escort dictionary:
-# ROOMS = "ABCUVPRW"
-# TRANSFORMS = "MF"
+# ROOMS = "ABCUVPRWZa"
+# TRANSFORMS = "M"
 # MODIFIERS = "JK"
 # COMBINERS = "O"
-
-
 # # Some rooms require transforms
 # REQUIRED_MODIFIERS = {
 #     "A": "JK",
@@ -143,6 +142,12 @@ def parse(s, i=0):
                 return ("Fancy Tunnel", token), i + 1
             case "a":
                 return ("Worley Room", token), i + 1
+            case "b":
+                return ("Pit Room", token), i + 1
+            case "c":
+                return ("Big Worley Room", token), i + 1
+            case "d":
+                return ("Big Pit Room", token), i + 1
 
     if token in TRANSFORMS:
         child, j = parse(s, i + 1)
@@ -247,7 +252,10 @@ def self_overlap(room):
     direction_vector = np.array(a2[0][-1]["center"]) - np.array(
         a2[0][0]["center"]
     )
-    perpendicular_vector = perpendicular_2d_normalized(direction_vector)
+    try:
+        perpendicular_vector = perpendicular_2d_normalized(direction_vector)
+    except ValueError:
+        perpendicular_vector = (1, 0)
     depth_m = random.choices(["depth", "shift"], k=1, weights=[0.8, 0.2])[0]
     new_room = a2.copy()
     traversal_paths = a1.copy()
@@ -348,7 +356,7 @@ def curve_sweep_transform(room):
 
 def intersection_shaft(room_1, room_2):
     d = find_intersection_or_closest(room_1, room_2)
-    if d["intersects"]:
+    if not d["intersects"]:
         shaft = [
             {
                 "center": d["pair"][0]["center"],
@@ -535,16 +543,16 @@ def combine_tunnel(left, right):
     b2 = shift_room_multiple(
         b2,
         (
-            random.randint(2000, 3000),
-            random.randint(2000, 3000),
-            random.randint(-400, 400),
+            random.randint(3000, 4000),
+            random.randint(3000, 4000),
+            random.randint(-500, 500),
         ),
     )
     new_room = a2.copy()
     traversal_paths = a1.copy()
     shaft = intersection_shaft(list(flatten(b2)), list(flatten(a2)))
     if shaft:
-        tunnel_method = "straight"
+        tunnel_method = random.choice(["straight", "curved"])
         if tunnel_method == "straight":
             new_room += [shaft]
             traversal_paths += [[0, 1]]
@@ -577,7 +585,7 @@ def vertical_combine(left, right):
 
     if method == "vertical":
 
-        shaft_depth = -random.randint(2000, 2500)
+        shaft_depth = -random.randint(2500, 3000)
         shifting_point = (
             biggest["center"][0],
             biggest["center"][1],
@@ -597,9 +605,9 @@ def vertical_combine(left, right):
         ]
 
     else:
-        shaft_depth = random.choice([1, -1]) * random.randint(2000, 2500)
+        shaft_depth = random.choice([1, -1]) * random.randint(2500, 3000)
         circle_radius = random.randint(2000, 2500)
-        angle = np.deg2rad(random.randint(0, 360))
+        angle = np.deg2rad(random.randint(20, 40))
         shifting_point = (
             biggest["center"][0] + math.cos(angle) * circle_radius,
             biggest["center"][1] + math.sin(angle) * circle_radius,
@@ -642,6 +650,54 @@ def combine(operation, left, right):
 # ----------------------------------------------------------
 # -------- ROOM GENERATORS ---------------------------------
 # ----------------------------------------------------------
+def transform_cave(cave):
+    # 1. Anisotropic scaling
+    scaling = random.choice(["x", "y", "none"])
+    sx = sy = 1
+    if scaling == "x":
+        sx = np.random.uniform(2, 2.5)
+        sy = np.random.uniform(1, 1.1)
+    if scaling == "y":
+        sx = np.random.uniform(1, 1.1)
+        sy = np.random.uniform(2, 2.5)
+
+    cave = zoom(cave, (sy, sx), order=0)
+
+    # 2. Random warp
+    # strength = np.random.uniform(15, 40)
+    strength = 30
+    smoothness = np.random.uniform(15, 40)
+
+    cave = random_warp(cave, strength=strength, smoothness=smoothness)
+
+    return cave
+
+
+def random_warp(tilemap, strength=5, smoothness=20):
+    h, w = tilemap.shape
+
+    # Random displacement fields
+    dx = np.random.randn(h, w)
+    dy = np.random.randn(h, w)
+
+    # Make displacement spatially coherent
+    dx = gaussian_filter(dx, smoothness)
+    dy = gaussian_filter(dy, smoothness)
+
+    # Normalize
+    dx /= np.std(dx)
+    dy /= np.std(dy)
+
+    dx *= strength
+    dy *= strength
+
+    y, x = np.indices((h, w))
+
+    warped = map_coordinates(
+        tilemap, [y + dy, x + dx], order=0, mode="nearest"
+    )
+
+    return warped.astype(np.uint8)
 
 
 def generate_automaton_room():
@@ -651,8 +707,9 @@ def generate_automaton_room():
                 inverted=False,
                 randomize_size=False,
                 remove_pockets=True,
-                size=random.randint(15, 30),
+                size=random.randint(20, 35),
             )
+            # mutated_tilemap = transform_cave(tilemap)
             path, circles, *_ = create_room(tilemap)
             break
         except RoomTooSmall:
@@ -847,10 +904,18 @@ def generate_character_room():
     return circles, path
 
 
-def generate_worley_room():
+def generate_big_worley_room():
+    return generate_worley_room([(10, 10, 8), (6, 6, 8)])
+
+
+def generate_small_worley_room():
+    return generate_worley_room([(10, 10, 2), (8, 8, 2)])
+
+
+def generate_worley_room(shapes):
     from worley import generate_worley_cave
 
-    spheres, path = generate_worley_cave()
+    spheres, path = generate_worley_cave(shapes)
     circles = [
         {
             "center": (float(s[0][0]), float(s[0][1]), float(s[0][2])),
@@ -861,6 +926,105 @@ def generate_worley_room():
     circles = shift_room(circles, (0, 0, 0))
     circles = scale_spheres(circles, 300)
     return circles, path
+
+
+def generate_small_pit_room():
+    return generate_pit_room(2000)
+
+
+def generate_big_pit_room():
+    return generate_pit_room(4500)
+
+
+def generate_pit_room(max_height):
+
+    from main import sample_helix, circle_points
+
+    pit_method = random.choice(
+        ["spiral", "ribbed", "funnel", "straight", "beaded"]
+    )
+    # print(pit_method)
+    direction = 1
+    radius = random.randrange(700, 1200)
+    height = random.uniform(1500, max_height) + random.uniform(-500, 500)
+    if pit_method == "beaded":
+        small_r = min(0.5 * radius, 400)
+        big_r = radius
+        n = random.randint(5, 10)
+        main_shaft = [
+            {
+                "center": (0, ii * n, (small_r + big_r) * ii),
+                "radius": small_r if ii % 2 == 0 else big_r,
+            }
+            for ii in range(n)
+        ]
+        traversal_paths = [list(range(n))]
+        new_room = [main_shaft]
+    if pit_method == "straight":
+        n = random.randint(5, 10)
+        main_shaft = [
+            {
+                "center": (0, ii * n, ii * height / n),
+                "radius": radius,
+            }
+            for ii in range(n)
+        ]
+        traversal_paths = [list(range(n))]
+        new_room = [main_shaft]
+    elif pit_method == "funnel":
+        n = random.randint(5, 10)
+        main_shaft = [
+            {
+                "center": (0, ii * n, ii * height / n),
+                "radius": 300 + 150 * ii,
+            }
+            for ii in range(n)
+        ]
+        traversal_paths = [list(range(n))]
+        new_room = [main_shaft]
+    if pit_method == "spiral":
+        main_shaft = [
+            {"center": (0.0, 0.0, 0.0), "radius": radius},
+            {"center": (0.0, 0.0, 0.0), "radius": radius},
+            {"center": (0.0, 0.0, direction * height), "radius": radius},
+            {"center": (0.0, 0.0, direction * height), "radius": radius * 1.4},
+        ]
+        traversal_paths = [[0, 1, 2, 3]]
+        new_room = [main_shaft]
+        turns = 1
+        main_helix = sample_helix(radius * 1.3, direction * height, turns, 40)
+        main_helix = [{"center": h, "radius": 500} for h in main_helix]
+        new_room += [main_helix]
+        traversal_paths += [[ii + 4 for ii in list(range(len(main_helix)))]]
+    if pit_method == "ribbed":
+        main_shaft = [
+            {"center": (0.0, 0.0, 0.0), "radius": radius},
+            {"center": (0.0, 0.0, 0.0), "radius": radius},
+            {"center": (0.0, 0.0, direction * height), "radius": radius},
+            {"center": (0.0, 0.0, direction * height), "radius": radius * 1.4},
+        ]
+        traversal_paths = [[0, 1, 2, 3]]
+        new_room = [main_shaft]
+        for ii in [random.random() for _ in range(random.randint(1, 3))]:
+            circle = circle_points(6, radius * 1.3, (0, 0))
+            circle = [
+                {
+                    "center": (h[0], h[1], height * ii),
+                    "radius": random.randint(300, 600),
+                }
+                for h in circle
+            ]
+            new_room += [circle]
+            traversal_paths += [
+                [ii + len(list(flatten(traversal_paths))) for ii in range(6)]
+            ]
+
+    new_room = shift_room(
+        list(flatten(new_room)),
+        (0, 0, random.uniform(-height / 2, height / 2)),
+    )
+
+    return (new_room, list(flatten(traversal_paths)))
 
 
 ROOM_OPERATIONS = {
@@ -876,7 +1040,10 @@ ROOM_OPERATIONS = {
     "W": generate_worms_room,
     "X": generate_worms_room_big,
     "Z": generate_fancy_tunnel_room,
-    "a": generate_worley_room,
+    "a": generate_small_worley_room,
+    "b": generate_small_pit_room,
+    "c": generate_big_worley_room,
+    "d": generate_big_pit_room,
 }
 
 
@@ -1028,7 +1195,7 @@ if __name__ == "__main__":
     # generation = REFINERY for refinery and escort rooms in custom rooms
     # generation = WILD for complex rooms (chaotic preset)
     # generation = SIMPLE for simpler rooms (neutral preset)
-    generation = "SIMPLE"
+    generation = "WILD"
     if generation == "REFINERY" or generation == "REFINERY_CUSTOMROOMS":
         tags = ["small", "medium", "big"]
         num_rooms = {"small": 40, "medium": 40, "big": 40}
@@ -1062,12 +1229,14 @@ if __name__ == "__main__":
                     if generation == "WILD":
                         if tag == "small":
                             room = generate(
-                                depth=1, n_rooms=1, rooms_list="ABCPRWZa"
+                                depth=1, n_rooms=1, rooms_list="ABCPRWZab"
                             )
                         elif tag == "medium" or tag == "end":
                             if room_chance < 0.7:
                                 room = generate(
-                                    depth=2, n_rooms=2, rooms_list="ABCPRUVWZa"
+                                    depth=2,
+                                    n_rooms=2,
+                                    rooms_list="ABCPRUVWZab",
                                 )
                             else:
                                 room = generate(
@@ -1076,59 +1245,63 @@ if __name__ == "__main__":
                         else:
                             if room_chance < 0.1:
                                 room = generate(
-                                    depth=2, n_rooms=1, rooms_list="DEX"
+                                    depth=2, n_rooms=1, rooms_list="DEXcd"
                                 )
                             elif room_chance < 0.2:
                                 room = generate(
-                                    depth=2, n_rooms=2, rooms_list="UVWa"
+                                    depth=2, n_rooms=2, rooms_list="UVWab"
                                 )
                             elif room_chance < 0.6:
                                 room = generate(
-                                    depth=2, n_rooms=3, rooms_list="ABCPRUVWZa"
+                                    depth=2,
+                                    n_rooms=3,
+                                    rooms_list="ABCPRUVWZab",
                                 )
                             else:
                                 room = generate(
                                     depth=2,
                                     n_rooms=2,
-                                    rooms_list="ABCPRUVWXZa",
+                                    rooms_list="ABCPRUVWXZab",
                                 )
                     elif generation == "SIMPLE":
                         if tag == "small":
                             room = generate(
                                 depth=1,
                                 n_rooms=1,
-                                rooms_list="ABCPRZa",
+                                rooms_list="ABCPRZab",
                                 # depth=1,
                                 # n_rooms=1,
-                                # rooms_list="a",
+                                # rooms_list="b",
                             )
                         elif tag == "medium" or tag == "end":
-                            if room_chance < 0.3:
+                            if room_chance < 0.5:
                                 room = generate(
-                                    depth=2, n_rooms=2, rooms_list="ABCPRZa"
-                                )
-                            elif room_chance < 0.8:
-                                room = generate(
-                                    depth=2, n_rooms=1, rooms_list="ABCPRUVWZa"
-                                )
-                            else:
-                                room = generate(
-                                    depth=2, n_rooms=1, rooms_list="UVW"
-                                )
-                        else:
-                            if room_chance < 0.15:
-                                room = generate(
-                                    depth=2, n_rooms=3, rooms_list="ABCPRZa"
-                                )
-                            elif room_chance < 0.6:
-                                room = generate(
-                                    depth=2, n_rooms=2, rooms_list="ABCPRZa"
+                                    depth=2, n_rooms=2, rooms_list="ABCPRZab"
                                 )
                             else:
                                 room = generate(
                                     depth=2,
+                                    n_rooms=1,
+                                    rooms_list="ABCPRUVWZab",
+                                )
+                        else:
+                            if room_chance < 0.15:
+                                room = generate(
+                                    depth=2, n_rooms=3, rooms_list="ABCPRZab"
+                                )
+                            elif room_chance < 0.5:
+                                room = generate(
+                                    depth=2, n_rooms=2, rooms_list="ABCPRZab"
+                                )
+                            elif room_chance < 0.85:
+                                room = generate(
+                                    depth=2,
                                     n_rooms=2,
-                                    rooms_list="ABCPRUVWXZa",
+                                    rooms_list="ABCPRUVWXZab",
+                                )
+                            else:
+                                room = generate(
+                                    depth=2, n_rooms=1, rooms_list="UVWcd"
                                 )
                     else:
                         if tag == "small":
@@ -1162,43 +1335,44 @@ if __name__ == "__main__":
                     print(room, tree)
                     # Optional scaling step:
                     new_room, traversal_path = build(tree)
+                    # print(new_room, traversal_path)
                     entrances = generate_entrances(
                         list(flatten(new_room)),
                         exit_interval=(200, 280),
                         entrance_interval=(30, 140),
                     )
                     entrance_order = random.random()
-                    if entrance_order < 0.8:
-                        entrances = generate_entrances(
-                            new_room[0],
-                            return_type="Entrances",
-                            entrance_interval=(0, 110),
-                        )
-                        exits = generate_entrances(
-                            new_room[-1],
-                            return_type="Exits",
-                            exit_interval=(200, 290),
-                        )
-                    else:
-                        entrances = generate_entrances(
-                            new_room[-1],
-                            return_type="Entrances",
-                            entrance_interval=(0, 110),
-                        )
-                        exits = generate_entrances(
-                            new_room[0],
-                            return_type="Exits",
-                            exit_interval=(200, 310),
-                        )
-                    # entrances = generate_entrances(
-                    #     list(flatten(new_room)),
-                    #     exit_interval=(200, 280),
-                    #     entrance_interval=(30, 140),
-                    #     return_type="Entrances",
-                    # )
-                    # exits = generate_exits_furthest(
-                    #     list(flatten(new_room)), entrances
-                    # )
+                    # if entrance_order < 0.8:
+                    #     entrances = generate_entrances(
+                    #         new_room[0],
+                    #         return_type="Entrances",
+                    #         entrance_interval=(0, 110),
+                    #     )
+                    #     exits = generate_entrances(
+                    #         new_room[-1],
+                    #         return_type="Exits",
+                    #         exit_interval=(200, 290),
+                    #     )
+                    # else:
+                    #     entrances = generate_entrances(
+                    #         new_room[-1],
+                    #         return_type="Entrances",
+                    #         entrance_interval=(0, 110),
+                    #     )
+                    #     exits = generate_entrances(
+                    #         new_room[0],
+                    #         return_type="Exits",
+                    #         exit_interval=(200, 310),
+                    #     )
+                    entrances = generate_entrances(
+                        list(flatten(new_room)),
+                        exit_interval=(200, 280),
+                        entrance_interval=(30, 140),
+                        return_type="Entrances",
+                    )
+                    exits = generate_exits_furthest(
+                        list(flatten(new_room)), entrances
+                    )
                     has_entrance_and_exit(entrances + exits)
                     break
                 except MissingEntranceOrExit:
@@ -1228,6 +1402,12 @@ if __name__ == "__main__":
                 {"bounds": 4000, "tags": room_tag},
                 pe,
             )
+
+            try:
+                with open(f"room_log_{generation}.txt", "a") as logfile:
+                    logfile.write(f"{room_name}{room_num} {room}\n")
+            except Exception as e:
+                logging.error(f"Couldn't write {name} on logfile: {e}")
 
             try:
                 path = Path("generated")

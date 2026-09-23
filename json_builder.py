@@ -1,6 +1,8 @@
 import random
 import numpy as np
 import math
+from pillars import generate_formation
+from more_itertools import flatten
 
 
 def most_free_angle(main_circle, surrounding_circles):
@@ -404,18 +406,31 @@ def furthest_spheres(spheres, point, n=3):
     return sorted(spheres, key=distance_to_sphere, reverse=True)[:n]
 
 
+def normalize(v):
+    x, y = v
+    length = math.sqrt(x**2 + y**2)
+    return np.array((x / length, y / length))
+
+
+def angle_degrees(v):
+    x, y = v
+    return math.degrees(math.atan2(y, x))
+
+
 def generate_exits_furthest(circles, entrances):
 
     room_center = xy_center(circles)
     exits = []
     for entrance in entrances:
         entrance_location = (entrance[0], entrance[1], entrance[2])
-        candidates = furthest_spheres(circles, entrance_location)
+        candidates = furthest_spheres(circles, entrance_location, n=1)
         for candidate in candidates:
-            exit_point = np.array(
-                [candidate["center"][0], candidate["center"][1]]
-            ) - np.array(room_center)
-            exit_point = (exit_point[0], exit_point[1], candidate["center"][2])
+            C = np.array((candidate["center"][0], candidate["center"][1]))
+            P = np.array(room_center)
+            A = C - P
+            B = C + candidate["radius"] * normalize(A)
+
+            exit_point = (B[0], B[1])
             exits.append(
                 (
                     exit_point[0],
@@ -425,7 +440,7 @@ def generate_exits_furthest(circles, entrances):
                     + candidate.get("floor_depth", 0) * 0.8,
                     0,
                     0,
-                    90,
+                    angle_degrees(A),
                     "Exit",
                 )
             )
@@ -563,6 +578,47 @@ def sample_point_in_disk(disk):
     return (x, y, z)
 
 
+def select_pillars(spheres, n=3):
+    if not spheres:
+        return []
+
+    selected_indices = [
+        max(range(len(spheres)), key=lambda i: spheres[i]["radius"])
+    ]
+
+    while len(selected_indices) < min(n, len(spheres)):
+        remaining_indices = [
+            i for i in range(len(spheres)) if i not in selected_indices
+        ]
+
+        chosen = max(
+            remaining_indices,
+            key=lambda i: min(
+                clearance(spheres[i], spheres[j]) for j in selected_indices
+            ),
+        )
+
+        selected_indices.append(chosen)
+
+    return [spheres[i] for i in selected_indices]
+
+
+def clearance(a, b):
+    center_distance = np.linalg.norm(
+        np.asarray(a["center"]) - np.asarray(b["center"])
+    )
+
+    return center_distance - a["radius"] - b["radius"]
+
+
+def distance_3d(p1, p2):
+    """Return the Euclidean distance between two 3D points."""
+    x1, y1, z1 = p1
+    x2, y2, z2 = p2
+
+    return math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2 + (z2 - z1) ** 2)
+
+
 def generate_pillars(circles, method=None, height_mult=1):
     """
     Here we generate some random pillars, not too many, just for added decoration.
@@ -571,24 +627,43 @@ def generate_pillars(circles, method=None, height_mult=1):
     # number_of_pillars = (
     #     random.randrange(5) if len(circles) > 4 else len(circles) - 1
     # )
-    suitable_circles = sorted(
-        circles, key=lambda x: x["radius"], reverse=True
-    )[: math.ceil(len(circles) * 0.15)]
+    # suitable_circles = sorted(
+    #     circles, key=lambda x: x["radius"], reverse=True
+    # )[: math.ceil(len(circles) * 0.15)]
+    suitable_circles = select_pillars(circles, n=4)
 
     for c in suitable_circles:
         pillar_method = (
             random.choice(
                 [
-                    "stalactite",
-                    "stalagmite",
-                    "straight",
-                    "balls",
+                    # "stalactite",
+                    # "stalagmite",
+                    # "straight",
+                    # "balls",
+                    "formation",
                 ]
             )
             if method is None
             else method
         )
         match pillar_method:
+            case "formation":
+                formation = generate_formation(
+                    origin=sample_point_in_disk(c),
+                    length=random.randint(500, 700),
+                    radius=random.randint(150, 300),
+                    n_segments=random.randint(3, 5),
+                )
+                pillars.append(
+                    [
+                        {
+                            "Location": p,
+                            "Range": random.randrange(100, 250),
+                            "NoiseRange": random.randrange(100, 250),
+                        }
+                        for p in formation
+                    ]
+                )
             case "balls":
                 if c["radius"] < 400:
                     continue

@@ -444,8 +444,8 @@ def generate_tunnel(
 
             return spiral(
                 center=center,
-                start_radius=rng.uniform(50, 150),
-                end_radius=rng.uniform(50, 150),
+                start_radius=rng.uniform(50, 110),
+                end_radius=rng.uniform(50, 110),
                 height=rng.uniform(length * 0.6, length),
                 turns=rng.uniform(0.75, 2.5),
                 points=max(50, int(length / step)),
@@ -545,7 +545,7 @@ def generate_tunnel(
     for segment_index in range(max_segments):
 
         kind = rng.choice(types, p=np.asarray(weights) / sum(weights))
-        print(kind)
+        # print(kind)
 
         # Don't make every segment crazy.
         segment_length = length / max_segments

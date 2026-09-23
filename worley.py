@@ -109,31 +109,23 @@ def generate_cave(
     return density
 
 
-def generate_worley_cave():
+def generate_worley_cave(shapes):
 
     from noise3d import distance_transform_edt, find_local_maxima, nearest_path
 
     rng = random.randint(0, 10000)
+    # s = random.choice([(10, 10, 8), (6, 6, 8), (10, 10, 2)])
+    s = random.choice(shapes)
     cave = generate_cave(
-        size=(10, 10, 2),
-        # size=(2, 8, 10),
+        size=s,
         cell_size=2,
         threshold=0.35,
         seed=rng,
     )
 
-    # Convert density to a binary voxel cave.
-    # True = solid, False = empty.
-    # solid = cave > 0.35
     dist = distance_transform_edt(cave > 0.35)
     centers = find_local_maxima(dist)
     spheres = [(tuple(c), dist[tuple(c)]) for c in centers]
-    # print(spheres[0])
-    # spheres = filter_overlapping_spheres(
-    #     [(c[0][0], c[0][1], c[0][1], c[1]) for c in spheres],
-    #     overlap_factor=0.05,
-    # )
-    # spheres = [((c[0], c[1], c[2]), c[3]) for c in spheres]
     path = nearest_path(spheres)
 
     return spheres, path
