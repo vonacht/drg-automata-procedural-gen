@@ -1,0 +1,2203 @@
+import random
+import math
+from pathlib import Path
+import json
+import logging
+import string
+import numpy as np
+from more_itertools import flatten
+from worms import generate_3d_worm_cave_parameterized, generate_3d_worm_cave
+from scipy.ndimage import gaussian_filter, map_coordinates, zoom
+from heightmap import apply_heightmap_to_spheres
+from main import (
+    create_room,
+    create_random_walk,
+    run_automata,
+    create_DLA_tilemap,
+    shift_room,
+    shift_room_2d,
+    scale_spheres,
+    points_2d_to_shape,
+    find_intersection_or_closest,
+    points_to_sphere,
+    quadratic_bezier_3d,
+    perpendicular_2d_normalized,
+    rotate_spheres,
+    rotation_matrix_axis_angle,
+    RoomTooSmall,
+    midpoint_displacement,
+    return_half_disks,
+)
+from noise3d_2 import create_noise_room, create_anisotropic_noise_room
+from erosion import erosion_room
+from alphabet import (
+    assemble_letter,
+    assemble_letter_devanagari,
+    assemble_letter_math,
+)
+from json_builder import (
+    generate_entrances,
+    generate_exit_w_vector,
+    generate_PE_features,
+    build_json,
+    build_json_multiple_ffill,
+    generate_pillars,
+    generate_pillars_balls,
+    generate_exits_furthest,
+)
+
+
+# Normal dictionary:
+ROOMS = "ABCDEUVPRWXZabcd"
+
+# Base volume of each room.
+#
+# Rooms not listed here have a volume of 1.
+ROOM_VOLUMES = {
+    "D": 3,
+    "E": 3,
+    "X": 3,
+    "c": 2,
+    "d": 2,
+}
+
+
+# Some rooms require transforms
+REQUIRED_MODIFIERS = {
+    "A": "JIQSK",
+    "B": "JIQSK",
+    "C": "JIQSK",
+    "P": "JIQSK",
+}
+
+
+# ---------------------------------------------------------------------------
+# Operations
+# ---------------------------------------------------------------------------
+
+OPERATIONS = {
+    # Volume-changing operations
+    "M": {"volume": 2},
+    "Q": {"volume": 2},
+    "K": {"volume": 2},
+    # Volume-neutral operations
+    "I": {"volume": 1},
+    "J": {"volume": 1},
+    "L": {"volume": 1},
+    "S": {"volume": 2},
+    "H": {"volume": 1},
+    "G": {"volume": 1},
+}
+
+OPERATION_NAMES = list(OPERATIONS)
+
+
+# ---------------------------------------------------------------------------
+# Combiners
+# ---------------------------------------------------------------------------
+
+COMBINERS = ["O", "T", "Y"]
+COMBINER_WEIGHTS = [0.8, 0.1, 0.1]
+
+
+def combine_volume(left_volume, right_volume):
+    """Calculate the volume of a combined room."""
+    return left_volume + right_volume
+
+
+# ---------------------------------------------------------------------------
+# Volume helpers
+# ---------------------------------------------------------------------------
+
+
+def calculate_max_operation_depth(
+    max_volume,
+    min_room_volume,
+):
+    volume_levels = max(
+        0, int(math.floor(math.log2(max_volume / min_room_volume)))
+    )
+
+    return 4 + volume_levels
+
+
+def choose_operation_depth(max_volume, min_room_volume):
+    max_depth = calculate_max_operation_depth(
+        max_volume,
+        min_room_volume,
+    )
+
+    min_depth = 2
+
+    if max_depth <= min_depth:
+        return max_depth
+
+    value = np.random.beta(1.5, 3.0)
+
+    return int(min_depth + value * (max_depth - min_depth))
+
+
+def calculate_max_depth(max_volume, min_room_volume):
+    """
+    Calculate the maximum operation depth available for a generation.
+
+    Volume-changing operations consume the volume budget, while
+    volume-neutral operations can continue to add complexity.
+
+    Returns
+    -------
+    int
+        Maximum allowed operation depth.
+    """
+
+    if max_volume <= min_room_volume:
+        return 4
+
+    volume_levels = int(math.floor(math.log2(max_volume / min_room_volume)))
+
+    # Base allowance for volume-neutral operations.
+    neutral_depth = 4
+
+    # Additional depth made possible by the available volume.
+    branching_depth = volume_levels * 2
+
+    return max(
+        4,
+        neutral_depth + branching_depth,
+    )
+
+
+def choose_depth(max_volume, min_room_volume):
+    """
+    Choose a random operation depth.
+
+    Biases toward moderate depths while occasionally allowing
+    substantially more complex structures.
+    """
+
+    max_depth = calculate_max_depth(
+        max_volume,
+        min_room_volume,
+    )
+
+    min_depth = 2
+
+    if max_depth <= min_depth:
+        return max_depth
+
+    # Beta distribution gives us more moderate values than
+    # uniform random selection, while still allowing the
+    # upper end.
+    value = np.random.beta(2.0, 1.5)
+
+    return int(min_depth + value * (max_depth - min_depth))
+
+
+def room_volume(room):
+    """
+    Return the base volume of a room.
+
+    Rooms not explicitly listed in ROOM_VOLUMES have volume 1.
+    """
+    return ROOM_VOLUMES.get(room, 1)
+
+
+def operation_volume(op):
+    return OPERATIONS[op]["volume"]
+
+
+def apply_operation(op, volume, max_volume):
+    """
+    Apply an operation.
+
+    Returns the new volume, or None if it would exceed max_volume.
+    """
+    new_volume = volume * operation_volume(op)
+
+    if new_volume > max_volume:
+        return None
+
+    return new_volume
+
+
+def valid_operations(volume, max_volume):
+    """Return operations that fit within the volume limit."""
+    return [
+        op
+        for op in OPERATION_NAMES
+        if apply_operation(op, volume, max_volume) is not None
+    ]
+
+
+# ---------------------------------------------------------------------------
+# Minimum volume
+# ---------------------------------------------------------------------------
+
+
+def minimum_room_volume(rooms_list):
+    """
+    Return the smallest possible base-room volume from rooms_list.
+    """
+    if not rooms_list:
+        raise ValueError("rooms_list cannot be empty")
+
+    return min(room_volume(room) for room in rooms_list)
+
+
+def minimum_volume(n_rooms, rooms_list):
+    """
+    Minimum possible volume of a subtree containing n_rooms.
+
+    This assumes we can choose the smallest room for every leaf.
+
+    For example, if:
+        A = 2
+        B = 2
+        D = 1
+
+    then:
+
+        minimum_volume(1) = 1
+        minimum_volume(2) = 2
+        minimum_volume(3) = 3
+
+    because D can be selected for every leaf.
+
+    Required/optional operations can only increase volume, so the
+    minimum is based on the base room volumes.
+    """
+    return n_rooms * minimum_room_volume(rooms_list)
+
+
+def can_fit(n_rooms, max_volume, rooms_list):
+    """
+    Return True if a subtree containing n_rooms can possibly fit
+    inside max_volume.
+    """
+    return minimum_volume(n_rooms, rooms_list) <= max_volume
+
+
+# ---------------------------------------------------------------------------
+# Leaf / single room
+# ---------------------------------------------------------------------------
+
+
+def make_room(
+    rooms_list,
+    operation_depth,
+    max_volume,
+):
+    """
+    Generate a single base room and apply a random sequence
+    of operations.
+
+    Volume-changing operations must fit within max_volume.
+    Volume-neutral operations do not consume volume budget.
+
+    Returns:
+        (dna, volume)
+
+    or None if no valid room can be generated.
+    """
+
+    valid_rooms = [
+        room for room in rooms_list if room_volume(room) <= max_volume
+    ]
+
+    if not valid_rooms:
+        return None
+
+    room = random.choice(valid_rooms)
+
+    volume = room_volume(room)
+
+    # ---------------------------------------------------------------
+    # Required modifiers
+    # ---------------------------------------------------------------
+
+    required = REQUIRED_MODIFIERS.get(room, "")
+
+    if required:
+        required = random.choice(required)
+
+    for op in required:
+
+        new_volume = apply_operation(
+            op,
+            volume,
+            max_volume,
+        )
+
+        if new_volume is None:
+            return None
+
+        volume = new_volume
+
+    room = required + room
+
+    # ---------------------------------------------------------------
+    # Optional operations
+    # ---------------------------------------------------------------
+
+    while operation_depth > 0:
+
+        # Operations that don't consume volume.
+        neutral = [op for op in OPERATION_NAMES if operation_volume(op) == 1]
+
+        # Operations that increase volume.
+        volume_changing = [
+            op
+            for op in OPERATION_NAMES
+            if operation_volume(op) > 1
+            and volume * operation_volume(op) <= max_volume
+        ]
+
+        # -----------------------------------------------------------
+        # At the volume limit, only neutral operations are possible.
+        # -----------------------------------------------------------
+
+        if volume >= max_volume:
+            if not neutral:
+                break
+
+            op = random.choice(neutral)
+
+        else:
+
+            # -------------------------------------------------------
+            # Weight neutral operations more heavily.
+            #
+            # This is the important part: neutral operations remain
+            # available even when volume-changing operations don't fit.
+            # -------------------------------------------------------
+
+            candidates = []
+
+            # Add each neutral operation multiple times to increase
+            # its probability.
+            candidates.extend(neutral * 3)
+
+            # Volume-changing operations get normal weight.
+            candidates.extend(volume_changing)
+
+            if not candidates:
+                break
+
+            op = random.choice(candidates)
+
+        # -----------------------------------------------------------
+        # Apply operation
+        # -----------------------------------------------------------
+
+        new_volume = apply_operation(
+            op,
+            volume,
+            max_volume,
+        )
+
+        if new_volume is None:
+            # This should only happen for an unexpected invalid
+            # volume-changing operation.
+            break
+
+        volume = new_volume
+        room = op + room
+
+        operation_depth -= 1
+
+    return room, volume
+
+
+# ---------------------------------------------------------------------------
+# Recursive generator
+# ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Recursive generator
+# ---------------------------------------------------------------------------
+
+
+def _generate(
+    rooms_list,
+    max_volume,
+    target_volume,
+):
+    """
+    Generate a subtree.
+
+    The number of rooms emerges automatically from the available
+    volume.
+    """
+
+    min_room = minimum_room_volume(rooms_list)
+
+    # ---------------------------------------------------------------
+    # Try a single room.
+    # ---------------------------------------------------------------
+
+    operation_depth = choose_operation_depth(
+        max_volume=max_volume,
+        min_room_volume=min_room,
+    )
+
+    room_result = make_room(
+        rooms_list=rooms_list,
+        operation_depth=operation_depth,
+        max_volume=max_volume,
+    )
+
+    # ---------------------------------------------------------------
+    # If we don't have enough volume for two rooms, stop here.
+    # ---------------------------------------------------------------
+
+    if max_volume < min_room * 2:
+        return room_result
+
+    # ---------------------------------------------------------------
+    # If the room already uses a good amount of the target,
+    # sometimes stop here.
+    # ---------------------------------------------------------------
+
+    if room_result is not None:
+
+        room, room_volume_value = room_result
+
+        if room_volume_value >= target_volume:
+            return room_result
+
+    # ---------------------------------------------------------------
+    # Try splitting into two branches.
+    # ---------------------------------------------------------------
+
+    if target_volume < min_room * 2:
+        return room_result
+
+    remaining_target = target_volume - min_room
+
+    left_target = random.uniform(
+        min_room,
+        remaining_target,
+    )
+
+    right_target = target_volume - left_target
+
+    # ---------------------------------------------------------------
+    # Left branch
+    # ---------------------------------------------------------------
+
+    left_result = _generate(
+        rooms_list=rooms_list,
+        max_volume=left_target,
+        target_volume=left_target,
+    )
+
+    if left_result is None:
+        return room_result
+
+    left, left_volume = left_result
+
+    # ---------------------------------------------------------------
+    # Right branch gets any unused volume from the left.
+    # ---------------------------------------------------------------
+
+    remaining_volume = max_volume - left_volume
+
+    if remaining_volume < min_room:
+        return room_result
+
+    right_target = min(
+        right_target,
+        remaining_volume,
+    )
+
+    right_result = _generate(
+        rooms_list=rooms_list,
+        max_volume=remaining_volume,
+        target_volume=right_target,
+    )
+
+    if right_result is None:
+        return room_result
+
+    right, right_volume = right_result
+
+    # ---------------------------------------------------------------
+    # Combine
+    # ---------------------------------------------------------------
+
+    total_volume = left_volume + right_volume
+
+    if total_volume > max_volume:
+        return room_result
+
+    combiner = random.choices(
+        COMBINERS,
+        weights=COMBINER_WEIGHTS,
+        k=1,
+    )[0]
+
+    return (
+        combiner + left + right,
+        total_volume,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+
+def generate(
+    rooms_list="ACBDEPRUVW",
+    max_volume=4,
+    max_attempts=1000,
+):
+    """
+    Generate a random room DNA string.
+
+    max_volume is the only structural constraint exposed
+    to the caller.
+    """
+
+    min_room = minimum_room_volume(rooms_list)
+
+    if max_volume < min_room:
+        raise ValueError(
+            f"Cannot generate a room with max_volume={max_volume}. "
+            f"Minimum room volume is {min_room}."
+        )
+
+    for _ in range(max_attempts):
+
+        target_volume = random.uniform(
+            max_volume * 0.8,
+            max_volume,
+        )
+
+        result = _generate(
+            rooms_list=rooms_list,
+            max_volume=max_volume,
+            target_volume=target_volume,
+        )
+
+        if result is not None:
+            dna, volume = result
+            return dna
+
+    raise RuntimeError(
+        f"Could not generate a valid room after "
+        f"{max_attempts} attempts "
+        f"(max_volume={max_volume})"
+    )
+
+
+def parse(s, i=0):
+    token = s[i]
+
+    if token in ROOMS:
+        match token:
+            case "A":
+                return ("Cellular Automaton", token), i + 1
+            case "B":
+                return ("Random Walk", token), i + 1
+            case "C":
+                return ("DLA", token), i + 1
+            case "D":
+                return ("Erosion", token), i + 1
+            case "E":
+                return ("Noise", token), i + 1
+            case "P":
+                return ("Character", token), i + 1
+            case "R":
+                return ("Tunnel", token), i + 1
+            case "V":
+                return ("Simple Erosion", token), i + 1
+            case "U":
+                return ("Simple Noise", token), i + 1
+            case "W":
+                return ("Worms", token), i + 1
+            case "X":
+                return ("Big Worms", token), i + 1
+            case "Z":
+                return ("Fancy Tunnel", token), i + 1
+            case "a":
+                return ("Worley Room", token), i + 1
+            case "b":
+                return ("Pit Room", token), i + 1
+            case "c":
+                return ("Big Worley Room", token), i + 1
+            case "d":
+                return ("Big Pit Room", token), i + 1
+
+    if token in OPERATIONS:
+        child, j = parse(s, i + 1)
+        match token:
+            case "F":
+                return ("Curve Sweep", token, child), j
+            case "L":
+                return ("Taper", token, child), j
+            case "M":
+                return ("Mirror", token, child), j
+            case "N":
+                return ("Flat Sweep", token, child), j
+            case "K":
+                return ("Self Overlap", token, child), j
+            case "H":
+                return ("Twist", token, child), j
+            case "I":
+                return ("Rotation", token, child), j
+            case "J":
+                return ("Perlin Heightmap", token, child), j
+            case "Q":
+                return ("Vertical Stack", token, child), j
+            case "S":
+                return ("Vertical Drop", token, child), j
+            case "G":
+                return ("Nonlinear Scale", token, child), j
+
+    if token in COMBINERS:
+        left, j = parse(s, i + 1)
+        right, k = parse(s, j)
+        match token:
+            case "O":
+                return ("Overlap Combine", token, left, right), k
+            case "T":
+                return ("Tunnel Combine", token, left, right), k
+            case "Y":
+                return ("Vertical Combine", token, left, right), k
+
+    raise ValueError(f"Unknown token: {token}")
+
+
+def build(node):
+    kind = node[1]
+
+    if kind in ROOMS:
+        room = generate_room(node[1])
+        return room
+
+    if kind in OPERATIONS:
+        transform = node[1]
+        room = build(node[2])
+        return apply_transform(transform, room)
+
+    if kind in COMBINERS:
+        operation = node[1]
+        left = build(node[2])
+        right = build(node[3])
+        return combine(operation, left, right)
+
+
+# ----------------------------------------------------------
+# ---- ROOM TRANSFORMS ------------------------------------
+# ----------------------------------------------------------
+
+
+def room_rotation(room):
+    a2, a1 = room
+    rotated_room = []
+    direction_vector = np.array(a2[0][-1]["center"]) - np.array(
+        a2[0][0]["center"]
+    )
+    axis = (0, 0, 0)
+    while axis == (0, 0, 0):
+        axis = (
+            random.choice([0, 1]),
+            random.choice([0, 1]),
+            random.choices([0, 1], weights=[0.8, 0.2], k=1)[0],
+        )
+    theta = np.radians(random.uniform(30, 60))
+    R = rotation_matrix_axis_angle(axis, theta)
+    center_of_rotation = direction_vector / 2
+    for cluster in a2:  # Rotation around a random axis in 3D:
+        a_copy = rotate_spheres(cluster, center_of_rotation, R)
+        rotated_room += [a_copy]
+    return rotated_room, a1
+
+
+def perlin_heightmap_transform(room):
+    a2, a1 = room
+    heightmapped_room = []
+    for cluster in a2:
+        heightmapped_room.append(apply_heightmap_to_spheres(cluster))
+    return heightmapped_room, a1
+
+
+def self_overlap(room):
+    a2, a1 = room
+    direction_vector = np.array(a2[0][-1]["center"]) - np.array(
+        a2[0][0]["center"]
+    )
+    try:
+        perpendicular_vector = perpendicular_2d_normalized(direction_vector)
+    except ValueError:
+        perpendicular_vector = (1, 0)
+    depth_m = random.choices(["depth", "shift"], k=1, weights=[0.8, 0.2])[0]
+    new_room = a2.copy()
+    traversal_paths = a1.copy()
+    if depth_m == "depth":
+        for cluster in a2:
+            a_copy = [
+                {
+                    "center": (
+                        c["center"][0]
+                        + perpendicular_vector[0]
+                        + a2[0][0]["radius"] * random.uniform(0.7, 1.2),
+                        c["center"][1]
+                        - perpendicular_vector[1]
+                        + a2[0][0]["radius"] * random.uniform(0.7, 1.2),
+                        c["center"][2],
+                    ),
+                    "radius": c["radius"],
+                    "floor_depth": -random.randrange(500, 1500),
+                }
+                for c in cluster
+            ]
+            new_room += [a_copy]
+        traversal_paths += a1
+    else:
+        axis = (0, 0, 0)
+        while axis == (0, 0, 0):
+            axis = (
+                random.choice([0, 1]),
+                random.choice([0, 1]),
+                random.choice([0, 1]),
+            )
+        theta = np.radians(random.uniform(50, 120))
+        R = rotation_matrix_axis_angle(axis, theta)
+        center_of_rotation = direction_vector / 2
+        for cluster in a2:
+            a_copy = rotate_spheres(cluster, center_of_rotation, R)
+            new_room += [a_copy]
+        traversal_paths += a1
+
+    return new_room, traversal_paths
+
+
+def room_half_drop(room):
+    a2, a1 = room
+    direction = random.choice([1, -1])
+    dropped_room = []
+    for cluster in a2:
+        points_left, points_right = return_half_disks(cluster)
+        points_2 = points_2d_to_shape(
+            points_left,
+            800,
+            lambda x, y, z: (
+                random.randrange(-1500, -1000)
+                if direction == -1
+                else random.randrange(1000, 1500)
+            ),
+        )
+        points_right = points_2d_to_shape(points_right, 600, lambda x, y, z: 0)
+        points_2.extend(points_right)
+        dropped_room += [points_2]
+    return dropped_room, a1
+
+
+def curve_sweep_transform(room):
+
+    def compute_curve(N):
+        A = (0, 0)
+        B = random.choice([(10, 5), (-10, -5)])
+
+        curve = midpoint_displacement(A, B, depth=6, roughness=0.35)
+        height_function = random.choice([-1, 1])
+        curve = points_2d_to_shape(
+            curve,
+            2,
+            lambda i, x, y: i * height_function * random.uniform(0.06, 0.08),
+        )
+        curve = scale_spheres(curve, 350)
+        step = len(curve) // N
+        sample = curve[::step]
+        return sample
+
+    curve_points = compute_curve(1)
+    a2, a1 = room
+    swept_room = a2.copy()
+    paths = a1.copy()
+    for point in curve_points[1:]:
+        shifted = shift_room_multiple_2d(a2, point["center"])
+        shaft = intersection_shaft(
+            list(flatten(shifted)), list(flatten(swept_room))
+        )
+        if shaft:
+            swept_room += [shaft]
+            paths += [[0, 1]]
+        swept_room += shifted
+        paths += a1
+    return swept_room, paths
+
+
+def intersection_shaft(room_1, room_2):
+    d = find_intersection_or_closest(room_1, room_2)
+    if not d["intersects"]:
+        shaft = [
+            {
+                "center": d["pair"][0]["center"],
+                "radius": d["pair"][0]["radius"] * random.uniform(0.8, 1.5),
+            },
+            {
+                "center": d["pair"][1]["center"],
+                "radius": d["pair"][1]["radius"] * random.uniform(0.8, 1.5),
+            },
+        ]
+        return shaft
+    else:
+        return None
+
+
+def flat_sweep(room):
+
+    def compute_curve(N):
+        A = (0, 0)
+        B = random.choice([(10, 5), (-10, -5)])
+
+        curve = midpoint_displacement(A, B, depth=6, roughness=0.35)
+        height_function = 0
+        curve = points_2d_to_shape(
+            curve,
+            2,
+            lambda i, x, y: i * height_function * random.uniform(0.06, 0.08),
+        )
+        curve = scale_spheres(curve, 350)
+        step = len(curve) // N
+        sample = curve[::step]
+        return sample
+
+    curve_points = compute_curve(3)
+    a2, a1 = room
+    swept_room = a2.copy()
+    paths = a1.copy()
+    for point in curve_points:
+        shifted = shift_room_multiple_2d(a2, point["center"])
+        shaft = intersection_shaft(
+            list(flatten(shifted)), list(flatten(swept_room))
+        )
+        if shaft:
+            swept_room += [shaft]
+            paths += [[0, 1]]
+        swept_room += shifted
+        paths += a1
+    return swept_room, paths
+
+
+def vertical_stack(room):
+    a2, a1 = room
+    stacks = 2
+    shifted_room = a2.copy()
+    paths = a1.copy()
+    for height in [400, 800, 1200][: stacks - 1]:
+        shifted = shift_room_multiple(a2, (0, 0, height))
+        shifted_room += shifted
+        paths += a1
+    return shifted_room, paths
+
+
+def taper_transform(room):
+    a2, a1 = room
+
+    new_room = a2.copy()
+    paths = a1.copy()
+    center_point = get_room_center_multiple(a2)
+    center_point = (center_point[0], center_point[1], center_point[2] - 500)
+
+    for ii in range(1):
+        scaled_room = scale_room_multiple(a2, 0.8)
+        shifted_room = []
+        for cluster in scaled_room:
+            shifted_room += [
+                [
+                    {
+                        "radius": r["radius"],
+                        "center": (
+                            r["center"][0],
+                            r["center"][1],
+                            r["center"][2] - 400,
+                        ),
+                    }
+                    for r in cluster
+                ]
+            ]
+
+        new_room += shifted_room
+        paths += a1
+
+    return new_room, paths
+
+
+def mirror_room_transform(room):
+    def mirror(spheres, plane="xy"):
+        """
+        Reflect sphere centers across a coordinate plane.
+
+        plane:
+            'xy' -> z -> -z
+            'xz' -> y -> -y
+            'yz' -> x -> -x
+        """
+        mirrored = []
+        for cluster in spheres:
+            m = []
+            for sphere in cluster:
+                x, y, z = sphere["center"]
+
+                if plane == "xy":
+                    center = (x, y, -z)
+                elif plane == "xz":
+                    center = (x, -y, z)
+                elif plane == "yz":
+                    center = (-x, y, z)
+                else:
+                    raise ValueError("plane must be 'xy', 'xz', or 'yz'")
+
+                m.append({"center": center, "radius": sphere["radius"]})
+            mirrored.append(m)
+
+        return mirrored
+
+    a2, a1 = room
+    new_room = a2 + mirror(a2, random.choice(["xy", "xz", "yz"]))
+    path = a1 + a1
+
+    return new_room, path
+
+
+def twist_transform(room):
+    """
+    Twist a nested collection of spheres around the collection's
+    principal axis.
+
+    Parameters
+    ----------
+    groups : list[list[dict]]
+        Nested sphere structure. The structure is preserved.
+
+    angle : float
+        Total twist angle in radians.
+
+    Returns
+    -------
+    list[list[dict]]
+        Same nested structure with transformed sphere centers.
+    """
+
+    spheres, a1 = room
+    groups = spheres.copy()
+
+    angle = random.uniform(-math.pi, math.pi)
+
+    if not groups:
+        return []
+
+    # ------------------------------------------------------------
+    # Flatten the spheres, while remembering their original
+    # group structure.
+    # ------------------------------------------------------------
+
+    spheres = [sphere for group in groups for sphere in group]
+
+    if len(spheres) < 2:
+        return [[sphere.copy() for sphere in group] for group in groups], path
+
+    # ------------------------------------------------------------
+    # Get all centers
+    # ------------------------------------------------------------
+
+    centers = np.array([sphere["center"] for sphere in spheres], dtype=float)
+
+    # ------------------------------------------------------------
+    # Find centroid
+    # ------------------------------------------------------------
+
+    centroid = centers.mean(axis=0)
+
+    centered = centers - centroid
+
+    # ------------------------------------------------------------
+    # PCA → principal axis
+    # ------------------------------------------------------------
+
+    covariance = np.cov(centered, rowvar=False)
+
+    eigenvalues, eigenvectors = np.linalg.eigh(covariance)
+
+    axis = eigenvectors[:, np.argmax(eigenvalues)]
+
+    axis /= np.linalg.norm(axis)
+
+    # ------------------------------------------------------------
+    # Project points onto the principal axis
+    # ------------------------------------------------------------
+
+    distances = centered @ axis
+
+    min_distance = distances.min()
+    max_distance = distances.max()
+
+    length = max_distance - min_distance
+
+    if length == 0:
+        return [[sphere.copy() for sphere in group] for group in groups], path
+
+    # ------------------------------------------------------------
+    # Transform every sphere
+    # ------------------------------------------------------------
+
+    transformed = []
+
+    for sphere, distance in zip(spheres, distances):
+
+        point = np.array(sphere["center"], dtype=float)
+
+        # Position along the axis, normalized to [0, 1]
+        u = (distance - min_distance) / length
+
+        # Twist around the center of the shape.
+        #
+        # u = 0   → -angle / 2
+        # u = 0.5 → 0
+        # u = 1   → +angle / 2
+        theta = (u - 0.5) * angle
+
+        # Closest point on the principal axis
+        axis_point = centroid + axis * distance
+
+        # Vector perpendicular to the axis
+        radial = point - axis_point
+
+        cos_theta = math.cos(theta)
+        sin_theta = math.sin(theta)
+
+        # Rodrigues' rotation formula
+        rotated = (
+            radial * cos_theta
+            + np.cross(axis, radial) * sin_theta
+            + axis * np.dot(axis, radial) * (1 - cos_theta)
+        )
+
+        new_center = axis_point + rotated
+
+        transformed.append({**sphere, "center": tuple(new_center)})
+
+    # ------------------------------------------------------------
+    # Reconstruct the original nested structure
+    # ------------------------------------------------------------
+
+    result = []
+    index = 0
+
+    for group in groups:
+        new_group = []
+
+        for _ in group:
+            new_group.append(transformed[index])
+            index += 1
+
+        result.append(new_group)
+
+    return result, a1.copy()
+
+
+def random_scale_power():
+    if np.random.random() < 0.5:
+        # Compress center / expand ends
+        power = np.random.normal(1.7, 0.25)
+    else:
+        # Expand center / compress ends
+        power = np.random.normal(0.65, 0.10)
+
+    return np.clip(power, 0.4, 2.2)
+
+
+def nonlinear_scaling(room):
+    """
+    Symmetrically nonlinearly scale a nested collection of spheres
+    along its principal axis.
+
+    Parameters
+    ----------
+    groups : list[list[dict]]
+        Nested sphere structure. The structure is preserved.
+
+    power : float
+        Controls the deformation.
+
+        power = 1.0 -> unchanged
+        power < 1.0 -> expands the center / compresses the ends
+        power > 1.0 -> compresses the center / expands the ends
+
+    Returns
+    -------
+    list[list[dict]]
+        Same nested structure with transformed sphere centers.
+    """
+
+    spheres, path = room
+    groups = spheres.copy()
+
+    power = random_scale_power()
+
+    if not groups:
+        return []
+
+    # ------------------------------------------------------------
+    # Flatten spheres
+    # ------------------------------------------------------------
+
+    spheres = [sphere for group in groups for sphere in group]
+
+    if len(spheres) < 2:
+        return [[sphere.copy() for sphere in group] for group in groups], path
+
+    # ------------------------------------------------------------
+    # Calculate principal axis
+    # ------------------------------------------------------------
+
+    centers = np.array(
+        [sphere["center"] for sphere in spheres],
+        dtype=float,
+    )
+
+    centroid = centers.mean(axis=0)
+    centered = centers - centroid
+
+    covariance = np.cov(centered, rowvar=False)
+
+    eigenvalues, eigenvectors = np.linalg.eigh(covariance)
+
+    axis = eigenvectors[:, np.argmax(eigenvalues)]
+    axis /= np.linalg.norm(axis)
+
+    # ------------------------------------------------------------
+    # Project centers onto the principal axis
+    # ------------------------------------------------------------
+
+    projections = centered @ axis
+
+    min_projection = projections.min()
+    max_projection = projections.max()
+
+    length = max_projection - min_projection
+
+    if length == 0:
+        return [[sphere.copy() for sphere in group] for group in groups], path
+
+    # ------------------------------------------------------------
+    # Apply symmetric nonlinear scale
+    # ------------------------------------------------------------
+
+    transformed = []
+
+    for sphere, projection in zip(spheres, projections):
+
+        point = np.array(
+            sphere["center"],
+            dtype=float,
+        )
+
+        # Normalize to [0, 1]
+        u = (projection - min_projection) / length
+
+        # Move to [-1, 1]
+        x = 2.0 * u - 1.0
+
+        # Symmetric power curve
+        new_x = np.sign(x) * (abs(x) ** power)
+
+        # Back to [0, 1]
+        new_u = 0.5 + 0.5 * new_x
+
+        # Back to the original axis coordinates
+        new_projection = min_projection + new_u * length
+
+        # Move the sphere along the principal axis
+        displacement = new_projection - projection
+
+        new_center = point + axis * displacement
+
+        transformed.append(
+            {
+                **sphere,
+                "center": tuple(new_center),
+            }
+        )
+
+    # ------------------------------------------------------------
+    # Reconstruct original nested structure
+    # ------------------------------------------------------------
+
+    result = []
+    index = 0
+
+    for group in groups:
+        new_group = []
+
+        for _ in group:
+            new_group.append(transformed[index])
+            index += 1
+
+        result.append(new_group)
+
+    return result, path.copy()
+
+
+def do_nothing_transform(room):
+    return room
+
+
+ROOM_TRANSFORMS = {
+    "I": room_rotation,
+    "J": perlin_heightmap_transform,
+    "H": twist_transform,
+    "F": curve_sweep_transform,
+    "G": nonlinear_scaling,
+    "K": self_overlap,
+    "L": taper_transform,
+    "M": mirror_room_transform,
+    "N": flat_sweep,
+    "Q": vertical_stack,
+    "S": room_half_drop,
+}
+
+
+def apply_transform(transform, room):
+    r = ROOM_TRANSFORMS[transform](room)
+    return r
+
+
+# ----------------------------------------------------------
+# -------- ROOM COMBINERS  ---------------------------------
+# ----------------------------------------------------------
+
+
+def combine_overlap(left, right):
+    a2, a1 = left
+    b2, b1 = right
+    b2 = shift_room_multiple(
+        b2,
+        (
+            random.randint(500, 900),
+            random.randint(500, 900),
+            random.randint(-400, 500),
+        ),
+    )
+    new_room = a2
+    for cluster in b2:
+        new_room.append(cluster)
+    traversal_paths = a1
+    for path in b1:
+        traversal_paths.append(path)
+    return (new_room, traversal_paths)
+
+
+def combine_tunnel(left, right):
+    a2, a1 = left
+    b2, b1 = right
+    b2 = shift_room_multiple(
+        b2,
+        (
+            random.randint(3000, 4000),
+            random.randint(3000, 4000),
+            random.randint(-500, 500),
+        ),
+    )
+    new_room = a2.copy()
+    traversal_paths = a1.copy()
+    shaft = intersection_shaft(list(flatten(b2)), list(flatten(a2)))
+    if shaft:
+        tunnel_method = random.choice(["straight", "curved"])
+        if tunnel_method == "straight":
+            new_room += [shaft]
+            traversal_paths += [[0, 1]]
+        else:
+            tunnel = quadratic_bezier_3d(
+                shaft[0]["center"],
+                shaft[1]["center"],
+                np.array(shaft[0]["center"]) - np.array(shaft[1]["center"]),
+                n_points=25,
+            )
+            tunnel = points_to_sphere(tunnel, random.randrange(500, 800))
+            new_room += [tunnel]
+            traversal_paths += [list(range(25))]
+
+    new_room += b2
+    traversal_paths += b1
+    return (new_room, traversal_paths)
+
+
+def vertical_combine(left, right):
+    a2, a1 = left
+    b2, b1 = right
+
+    # Get the biggest sphere from a2:
+    biggest = sorted(
+        list(flatten(a2)), key=lambda x: x["radius"], reverse=True
+    )[0]
+
+    method = random.choice(["vertical", "angled"])
+
+    if method == "vertical":
+
+        shaft_depth = -random.randint(2500, 3000)
+        shifting_point = (
+            biggest["center"][0],
+            biggest["center"][1],
+            biggest["center"][2] + shaft_depth,
+        )
+        b2 = shift_room_multiple(b2, shifting_point)
+
+        shaft = [
+            {
+                "center": biggest["center"],
+                "radius": biggest["radius"] * random.uniform(0.4, 0.7),
+            },
+            {
+                "center": shifting_point,
+                "radius": biggest["radius"] * random.uniform(0.4, 0.7),
+            },
+        ]
+
+    else:
+        shaft_depth = random.choice([1, -1]) * random.randint(2500, 3000)
+        circle_radius = random.randint(2000, 2500)
+        angle = np.deg2rad(random.randint(20, 40))
+        shifting_point = (
+            biggest["center"][0] + math.cos(angle) * circle_radius,
+            biggest["center"][1] + math.sin(angle) * circle_radius,
+            biggest["center"][2] + shaft_depth,
+        )
+        b2 = shift_room_multiple(b2, shifting_point)
+
+        shaft = [
+            {
+                "center": biggest["center"],
+                "radius": biggest["radius"] * random.uniform(0.4, 0.7),
+            },
+            {
+                "center": shifting_point,
+                "radius": biggest["radius"] * random.uniform(0.4, 0.7),
+            },
+        ]
+
+    new_room = a2.copy()
+    new_room += [shaft]
+    new_room += b2
+    traversal_paths = a1.copy()
+    traversal_paths += [[0, 1]]
+    traversal_paths += b1
+
+    return new_room, traversal_paths
+
+
+ROOM_COMBINERS = {
+    "O": combine_overlap,
+    "T": combine_tunnel,
+    "Y": vertical_combine,
+}
+
+
+def combine(operation, left, right):
+    return ROOM_COMBINERS[operation](left, right)
+
+
+# ----------------------------------------------------------
+# -------- ROOM GENERATORS ---------------------------------
+# ----------------------------------------------------------
+def transform_cave(cave):
+    # 1. Anisotropic scaling
+    scaling = random.choice(["x", "y", "none"])
+    sx = sy = 1
+    if scaling == "x":
+        sx = np.random.uniform(2, 2.5)
+        sy = np.random.uniform(1, 1.1)
+    if scaling == "y":
+        sx = np.random.uniform(1, 1.1)
+        sy = np.random.uniform(2, 2.5)
+
+    cave = zoom(cave, (sy, sx), order=0)
+
+    # 2. Random warp
+    # strength = np.random.uniform(15, 40)
+    strength = 30
+    smoothness = np.random.uniform(15, 40)
+
+    cave = random_warp(cave, strength=strength, smoothness=smoothness)
+
+    return cave
+
+
+def random_warp(tilemap, strength=5, smoothness=20):
+    h, w = tilemap.shape
+
+    # Random displacement fields
+    dx = np.random.randn(h, w)
+    dy = np.random.randn(h, w)
+
+    # Make displacement spatially coherent
+    dx = gaussian_filter(dx, smoothness)
+    dy = gaussian_filter(dy, smoothness)
+
+    # Normalize
+    dx /= np.std(dx)
+    dy /= np.std(dy)
+
+    dx *= strength
+    dy *= strength
+
+    y, x = np.indices((h, w))
+
+    warped = map_coordinates(
+        tilemap, [y + dy, x + dx], order=0, mode="nearest"
+    )
+
+    return warped.astype(np.uint8)
+
+
+def generate_automaton_room():
+    while True:
+        try:
+            tilemap = run_automata(
+                inverted=False,
+                randomize_size=False,
+                remove_pockets=True,
+                size=random.randint(20, 35),
+            )
+            # mutated_tilemap = transform_cave(tilemap)
+            path, circles, *_ = create_room(tilemap)
+            break
+        except RoomTooSmall:
+            continue
+    circles = scale_spheres(circles, random.uniform(1.1, 1.6))
+    circles = shift_room(circles, (0, 0, 0))
+    return circles, path
+
+
+def generate_random_walk_room():
+    while True:
+        try:
+            tilemap = create_random_walk(50, 50, 100)
+            path, circles, *_ = create_room(tilemap)
+            break
+        except RoomTooSmall:
+            continue
+    circles = scale_spheres(circles, random.uniform(1.1, 1.6))
+    circles = shift_room(circles, (0, 0, 0))
+    return circles, path
+
+
+def generate_worms_room():
+    tilemap, path = generate_3d_worm_cave_parameterized(3)
+    circles = [
+        {
+            "center": (float(s[0][0]), float(s[0][1]), float(s[0][2])),
+            "radius": s[1],
+        }
+        for s in tilemap
+    ]
+    circles = shift_room(circles, (0, 0, 0))
+    circles = scale_spheres(circles, 50)
+    return circles, path
+
+
+def generate_worms_room_big():
+    tilemap, path = generate_3d_worm_cave(3)
+    circles = [
+        {
+            "center": (float(s[0][0]), float(s[0][1]), float(s[0][2])),
+            "radius": s[1],
+        }
+        for s in tilemap
+    ]
+    circles = shift_room(circles, (0, 0, 0))
+    circles = scale_spheres(circles, 50)
+    return circles, path
+
+
+def generate_DLA_room():
+    # tilemap = create_DLA_tilemap(20, 20, 0.05, 0.4)
+    tilemap = create_DLA_tilemap(30, 30, 0.02, 0.8)
+    path, circles, *_ = create_room(tilemap)
+    circles = scale_spheres(circles, random.uniform(1.1, 1.6))
+    return circles, path
+
+
+def generate_erosion_room():
+    spheres, path = erosion_room(25, 500, method="erosion")
+    circles = [
+        {
+            "center": (float(s[0][0]), float(s[0][1]), float(s[0][2])),
+            "radius": s[1],
+        }
+        for s in spheres
+    ]
+    circles = shift_room(circles, (0, 0, 0))
+    circles = scale_spheres(circles, 140)
+    return circles, path
+
+
+def simplified_erosion_room():
+    spheres, path = erosion_room(20, 500, method="erosion")
+    circles = [
+        {
+            "center": (float(s[0][0]), float(s[0][1]), float(s[0][2])),
+            "radius": s[1],
+        }
+        for s in spheres
+    ]
+    circles = shift_room(circles, (0, 0, 0))
+    circles = scale_spheres(circles, 140)
+    return circles, path
+
+
+def generate_noise_room():
+    spheres, path = create_noise_room()
+    circles = [
+        {
+            "center": (float(s[0][0]), float(s[0][1]), float(s[0][2])),
+            "radius": s[1],
+        }
+        for s in spheres
+    ]
+    circles = shift_room(circles, (0, 0, 0))
+    circles = scale_spheres(circles, 350)
+    return circles, path
+
+
+def simplified_noise_room():
+    spheres, path = create_noise_room(15, 15, 8)
+    circles = [
+        {
+            "center": (float(s[0][0]), float(s[0][1]), float(s[0][2])),
+            "radius": s[1],
+        }
+        for s in spheres
+    ]
+    circles = shift_room(circles, (0, 0, 0))
+    circles = scale_spheres(circles, 350)
+    return circles, path
+
+
+def generate_tunnel_room():
+
+    A = (0, 0)
+    B = random.choice([(10, 5), (-10, -5)])
+
+    curve = midpoint_displacement(A, B, depth=6, roughness=0.35)
+    height_function = random.choice([-1, 1])
+    curve = points_2d_to_shape(
+        curve,
+        2,
+        lambda i, x, y: i * height_function * random.uniform(0.06, 0.08),
+    )
+    curve = scale_spheres(curve, 350)
+    curve = shift_room(curve, (0, 0, 0))
+    path = list(range(len(curve)))
+
+    return curve, path
+
+
+def generate_fancy_tunnel_room():
+
+    from tunnels_2 import generate_tunnel
+
+    tunnel = generate_tunnel(
+        (0, 0, 0), (1, 0, -0.5), length=500, step=20, max_segments=1
+    )
+    # print(tunnel)
+
+    radius = random.randint(80, 100)
+    curve = [{"center": p, "radius": radius} for p in tunnel]
+    curve = scale_spheres(curve, random.randint(5, 12))
+    curve = shift_room(curve, (0, 0, 0))
+    path = list(range(len(curve)))
+
+    return curve, path
+
+
+def generate_character_room():
+
+    letter_type = random.choice(["alphabet", "math"])
+
+    def random_character():
+        match letter_type:
+            case "alphabet":
+                chars = (
+                    string.ascii_uppercase
+                    + string.ascii_lowercase
+                    + string.digits
+                )
+            case "math":
+                chars = (
+                    list(range(0x2A00, 0x02AFF))
+                    + list(range(0x2200, 0x22FF))
+                    + list(range(0x1EE05, 0x1EE1F))
+                )
+
+        return random.choice(chars)
+
+    def make_letter_room(letter):
+        match letter_type:
+            case "alphabet":
+                points, path = assemble_letter(letter)
+            case "math":
+                letter = chr(letter)
+                points, path = assemble_letter_math(letter)
+        points = [(int(p1), int(p2)) for p1, p2 in points]
+        points = points_2d_to_shape(points, 23, lambda x, y, z: 0)
+        points = shift_room(points, (0, 0, 0))
+        points = scale_spheres(points, 35)
+        return points, path
+
+    while True:
+        try:
+            circles, path = make_letter_room(random_character())
+            break
+        except IndexError:
+            continue
+    return circles, path
+
+
+def generate_big_worley_room():
+    return generate_worley_room([(10, 10, 8), (6, 6, 8)])
+
+
+def generate_small_worley_room():
+    return generate_worley_room([(10, 10, 2), (8, 8, 2)])
+
+
+def generate_worley_room(shapes):
+    from worley import generate_worley_cave
+
+    spheres, path = generate_worley_cave(shapes)
+    circles = [
+        {
+            "center": (float(s[0][0]), float(s[0][1]), float(s[0][2])),
+            "radius": s[1],
+        }
+        for s in spheres
+    ]
+    circles = shift_room(circles, (0, 0, 0))
+    circles = scale_spheres(circles, 300)
+    return circles, path
+
+
+def generate_grid_room():
+
+    N = 5
+    pass
+
+
+def generate_small_pit_room():
+    return generate_pit_room(2000)
+
+
+def generate_big_pit_room():
+    return generate_pit_room(4500)
+
+
+def generate_pit_room(max_height):
+
+    from main import sample_helix, circle_points
+
+    pit_method = random.choice(
+        ["spiral", "ribbed", "funnel", "straight", "beaded"]
+    )
+    # print(pit_method)
+    direction = 1
+    radius = random.randrange(700, 1200)
+    height = random.uniform(1500, max_height) + random.uniform(-500, 500)
+    if pit_method == "beaded":
+        small_r = min(0.5 * radius, 400)
+        big_r = radius
+        n = random.randint(5, 10)
+        main_shaft = [
+            {
+                "center": (0, ii * n, (small_r + big_r) * ii),
+                "radius": small_r if ii % 2 == 0 else big_r,
+            }
+            for ii in range(n)
+        ]
+        traversal_paths = [list(range(n))]
+        new_room = [main_shaft]
+    if pit_method == "straight":
+        n = random.randint(5, 10)
+        main_shaft = [
+            {
+                "center": (0, ii * n, ii * height / n),
+                "radius": radius,
+            }
+            for ii in range(n)
+        ]
+        traversal_paths = [list(range(n))]
+        new_room = [main_shaft]
+    elif pit_method == "funnel":
+        n = random.randint(5, 10)
+        main_shaft = [
+            {
+                "center": (0, ii * n, ii * height / n),
+                "radius": 300 + 150 * ii,
+            }
+            for ii in range(n)
+        ]
+        traversal_paths = [list(range(n))]
+        new_room = [main_shaft]
+    if pit_method == "spiral":
+        main_shaft = [
+            {"center": (0.0, 0.0, 0.0), "radius": radius},
+            {"center": (0.0, 0.0, 0.0), "radius": radius},
+            {"center": (0.0, 0.0, direction * height), "radius": radius},
+            {"center": (0.0, 0.0, direction * height), "radius": radius * 1.4},
+        ]
+        traversal_paths = [[0, 1, 2, 3]]
+        new_room = [main_shaft]
+        turns = 1
+        main_helix = sample_helix(radius * 1.3, direction * height, turns, 40)
+        main_helix = [{"center": h, "radius": 500} for h in main_helix]
+        new_room += [main_helix]
+        traversal_paths += [[ii + 4 for ii in list(range(len(main_helix)))]]
+    if pit_method == "ribbed":
+        main_shaft = [
+            {"center": (0.0, 0.0, 0.0), "radius": radius},
+            {"center": (0.0, 0.0, 0.0), "radius": radius},
+            {"center": (0.0, 0.0, direction * height), "radius": radius},
+            {"center": (0.0, 0.0, direction * height), "radius": radius * 1.4},
+        ]
+        traversal_paths = [[0, 1, 2, 3]]
+        new_room = [main_shaft]
+        for ii in [random.random() for _ in range(random.randint(1, 3))]:
+            circle = circle_points(6, radius * 1.3, (0, 0))
+            circle = [
+                {
+                    "center": (h[0], h[1], height * ii),
+                    "radius": random.randint(300, 600),
+                }
+                for h in circle
+            ]
+            new_room += [circle]
+            traversal_paths += [
+                [ii + len(list(flatten(traversal_paths))) for ii in range(6)]
+            ]
+
+    new_room = shift_room(
+        list(flatten(new_room)),
+        (0, 0, random.uniform(-height / 2, height / 2)),
+    )
+
+    return (new_room, list(flatten(traversal_paths)))
+
+
+ROOM_OPERATIONS = {
+    "A": generate_automaton_room,
+    "B": generate_random_walk_room,
+    "C": generate_DLA_room,
+    "D": generate_erosion_room,
+    "E": generate_noise_room,
+    "P": generate_character_room,
+    "R": generate_tunnel_room,
+    "U": simplified_erosion_room,
+    "V": simplified_noise_room,
+    "W": generate_worms_room,
+    "X": generate_worms_room_big,
+    "Z": generate_fancy_tunnel_room,
+    "a": generate_small_worley_room,
+    "b": generate_small_pit_room,
+    "c": generate_big_worley_room,
+    "d": generate_big_pit_room,
+}
+
+
+def generate_room(room_type):
+    a2, a1 = ROOM_OPERATIONS[room_type]()
+    return [a2], [a1]
+
+
+def shift_room_multiple(spheres, point):
+    shifted_room = []
+    for cluster in spheres:
+        shifted_room.append(shift_room(cluster, point))
+    return shifted_room
+
+
+def shift_room_multiple_2d(spheres, point):
+    shifted_room = []
+    for cluster in spheres:
+        shifted_room.append(shift_room_2d(cluster, point))
+    return shifted_room
+
+
+def scale_room_multiple(spheres, scale_factor):
+    scaled_room = []
+    for cluster in spheres:
+        scaled_room.append(scale_spheres(cluster, scale_factor))
+    return scaled_room
+
+
+def scale_by_volume(sphere_groups, cube_size):
+    """
+    Uniformly scales a nested list of spheres so they fit inside a cube.
+
+    Parameters
+    ----------
+    sphere_groups : list[list[dict]]
+        Each sphere is:
+            {
+                "center": (x, y, z),
+                "radius": r
+            }
+
+    cube_size : float or (sx, sy, sz)
+        Side length of the cube or dimensions of a rectangular box.
+
+    Returns
+    -------
+    scaled_groups : list[list[dict]]
+        Same nested structure as the input.
+    scale : float
+        The scale factor applied.
+    """
+
+    if not sphere_groups:
+        return [], 1.0
+
+    # Flatten to compute the bounding box
+    all_spheres = [s for group in sphere_groups for s in group]
+
+    if not all_spheres:
+        return [[] for _ in sphere_groups], 1.0
+
+    # Allow either a scalar cube size or (sx, sy, sz)
+    if isinstance(cube_size, (int, float)):
+        sx = sy = sz = float(cube_size)
+    else:
+        sx, sy, sz = cube_size
+
+    min_x = min(s["center"][0] - s["radius"] for s in all_spheres)
+    max_x = max(s["center"][0] + s["radius"] for s in all_spheres)
+
+    min_y = min(s["center"][1] - s["radius"] for s in all_spheres)
+    max_y = max(s["center"][1] + s["radius"] for s in all_spheres)
+
+    min_z = min(s["center"][2] - s["radius"] for s in all_spheres)
+    max_z = max(s["center"][2] + s["radius"] for s in all_spheres)
+
+    width = max_x - min_x
+    height = max_y - min_y
+    depth = max_z - min_z
+
+    scale = min(
+        sx / width if width > 0 else float("inf"),
+        sy / height if height > 0 else float("inf"),
+        sz / depth if depth > 0 else float("inf"),
+    )
+
+    scaled_groups = []
+    for group in sphere_groups:
+        scaled_group = []
+        for s in group:
+            x, y, z = s["center"]
+            scaled_group.append(
+                {
+                    "center": (x * scale, y * scale, z * scale),
+                    "radius": s["radius"] * scale,
+                }
+            )
+        scaled_groups.append(scaled_group)
+
+    return scaled_groups, scale
+
+
+def get_room_center_multiple(room):
+    """
+    Compute the volume-weighted geometric center of a collection of spheres.
+
+    Each sphere is a dict with:
+        {"center": [x, y, z], "radius": r}
+    """
+    total_volume = 0.0
+    weighted_center = np.zeros(3)
+
+    spheres = list(flatten(room))
+
+    for sphere in spheres:
+        center = np.asarray(sphere["center"], dtype=float)
+        radius = float(sphere["radius"])
+
+        volume = (4 / 3) * np.pi * radius**3
+
+        weighted_center += volume * center
+        total_volume += volume
+
+    if total_volume == 0:
+        raise ValueError("Total sphere volume must be greater than zero")
+
+    return weighted_center / total_volume
+
+
+def sample_cube_size(target_mean=10, sigma=0.3):
+    mu = math.log(target_mean) - sigma**2 / 2
+    return random.lognormvariate(mu, sigma)
+
+
+def has_entrance_and_exit(tuples_list):
+    types = {t[-1] for t in tuples_list}
+    check = "Entrance" in types and "Exit" in types
+    if not check:
+        raise MissingEntranceOrExit
+
+
+class MissingEntranceOrExit(Exception):
+    pass
+
+
+if __name__ == "__main__":
+
+    # generation = REFINERY for refinery and escort rooms in custom rooms
+    # generation = WILD for complex rooms (chaotic preset)
+    # generation = SIMPLE for simpler rooms (neutral preset)
+    generation = "SIMPLE"
+    if generation == "REFINERY" or generation == "REFINERY_CUSTOMROOMS":
+        tags = ["small", "medium", "big"]
+        num_rooms = {"small": 40, "medium": 40, "big": 40}
+    else:
+        tags = ["small", "medium", "big", "end"]
+        num_rooms = {"small": 100, "medium": 100, "big": 100, "end": 25}
+    for tag in tags:
+        for i in range(num_rooms[tag]):
+            while True:
+                try:
+                    match tag:
+                        case "small":
+                            if generation == "REFINERY_CUSTOMROOMS":
+                                room_tag = ["Flat.Linear.CustomSmall"]
+                            else:
+                                room_tag = ["Rooms.Linear.CustomSmall"]
+                        case "medium":
+                            if generation == "REFINERY_CUSTOMROOMS":
+                                room_tag = ["Flat.Linear.CustomMedium"]
+                            else:
+                                room_tag = ["Rooms.Linear.CustomMedium"]
+                        case "end":
+                            room_tag = ["Rooms.Linear.End"]
+                        case "big":
+                            if generation == "REFINERY_CUSTOMROOMS":
+                                room_tag = ["Flat.Linear.CustomBig"]
+                            else:
+                                room_tag = ["Rooms.Linear.CustomBig"]
+                    room_num = i
+                    room_chance = random.random()
+                    if generation == "WILD":
+                        if tag == "small":
+                            room = generate(
+                                depth=1, n_rooms=1, rooms_list="ABCPRWZab"
+                            )
+                        elif tag == "medium" or tag == "end":
+                            if room_chance < 0.7:
+                                room = generate(
+                                    depth=2,
+                                    n_rooms=2,
+                                    rooms_list="ABCPRUVWZab",
+                                )
+                            else:
+                                room = generate(
+                                    depth=2, n_rooms=1, rooms_list="UVW"
+                                )
+                        else:
+                            if room_chance < 0.1:
+                                room = generate(
+                                    depth=2, n_rooms=1, rooms_list="DEXcd"
+                                )
+                            elif room_chance < 0.2:
+                                room = generate(
+                                    depth=2, n_rooms=2, rooms_list="UVWab"
+                                )
+                            elif room_chance < 0.6:
+                                room = generate(
+                                    depth=2,
+                                    n_rooms=3,
+                                    rooms_list="ABCPRUVWZab",
+                                )
+                            else:
+                                room = generate(
+                                    depth=2,
+                                    n_rooms=2,
+                                    rooms_list="ABCPRUVWXZab",
+                                )
+                    elif generation == "SIMPLE":
+                        if tag == "small":
+                            room = generate(
+                                rooms_list=ROOMS,
+                                max_volume=1,
+                                # depth=1,
+                                # n_rooms=1,
+                                # rooms_list="b",
+                            )
+                        elif tag == "medium" or tag == "end":
+                            # if room_chance < 0.5:
+                            #     room = generate(
+                            #         depth=random.randint(2, 3),
+                            #         n_rooms=2,
+                            #         rooms_list="ABCPRZab",
+                            #         max_volume=2,
+                            #     )
+                            # else:
+                            #     room = generate(
+                            #         depth=random.randint(2, 3),
+                            #         n_rooms=1,
+                            #         rooms_list="ABCPRUVWZab",
+                            #         max_volume=2,
+                            #     )
+                            room = generate(
+                                rooms_list=ROOMS,
+                                max_volume=random.randint(1, 2),
+                            )
+                        else:
+                            # if room_chance < 0.15:
+                            #     room = generate(
+                            #         depth=random.randint(3, 4),
+                            #         n_rooms=3,
+                            #         rooms_list="ABCPRZab",
+                            #         max_volume=3,
+                            #     )
+                            # elif room_chance < 0.5:
+                            #     room = generate(
+                            #         depth=random.randint(2, 3),
+                            #         n_rooms=2,
+                            #         rooms_list="ABCPRZab",
+                            #         max_volume=2,
+                            #     )
+                            # elif room_chance < 0.85:
+                            #     room = generate(
+                            #         depth=random.randint(2, 3),
+                            #         n_rooms=2,
+                            #         rooms_list="ABCPRUVWXZab",
+                            #         max_volume=2,
+                            #     )
+                            # else:
+                            #     room = generate(
+                            #         depth=random.randint(2, 3),
+                            #         n_rooms=1,
+                            #         rooms_list="UVWcd",
+                            #         max_volume=2,
+                            #     )
+                            room = generate(
+                                rooms_list=ROOMS,
+                                max_volume=random.randint(2, 3),
+                            )
+                    else:
+                        if tag == "small":
+                            room = generate(
+                                depth=1, n_rooms=1, rooms_list="ABCPRWZa"
+                            )
+                        elif tag == "medium" or tag == "end":
+                            if room_chance < 0.5:
+                                room = generate(
+                                    depth=2, n_rooms=2, rooms_list="ABCPRWZa"
+                                )
+                            elif room_chance < 0.8:
+                                room = generate(
+                                    depth=2, n_rooms=1, rooms_list="ABCPRUVWZa"
+                                )
+                            else:
+                                room = generate(
+                                    depth=2, n_rooms=1, rooms_list="UVW"
+                                )
+                        else:
+                            if room_chance < 0.3:
+                                room = generate(
+                                    depth=2, n_rooms=3, rooms_list="ABCPRZa"
+                                )
+                            else:
+                                room = generate(
+                                    depth=2, n_rooms=2, rooms_list="ABCPRUVWZa"
+                                )
+
+                    print(room)
+                    tree, _ = parse(room)
+                    print(room, tree)
+                    # Optional scaling step:
+                    new_room, traversal_path = build(tree)
+                    # print(new_room, traversal_path)
+                    entrances = generate_entrances(
+                        list(flatten(new_room)),
+                        exit_interval=(200, 280),
+                        entrance_interval=(30, 140),
+                    )
+                    entrance_order = random.random()
+                    # if entrance_order < 0.8:
+                    #     entrances = generate_entrances(
+                    #         new_room[0],
+                    #         return_type="Entrances",
+                    #         entrance_interval=(0, 110),
+                    #     )
+                    #     exits = generate_entrances(
+                    #         new_room[-1],
+                    #         return_type="Exits",
+                    #         exit_interval=(200, 290),
+                    #     )
+                    # else:
+                    #     entrances = generate_entrances(
+                    #         new_room[-1],
+                    #         return_type="Entrances",
+                    #         entrance_interval=(0, 110),
+                    #     )
+                    #     exits = generate_entrances(
+                    #         new_room[0],
+                    #         return_type="Exits",
+                    #         exit_interval=(200, 310),
+                    #     )
+                    entrances = generate_entrances(
+                        list(flatten(new_room)),
+                        exit_interval=(200, 280),
+                        entrance_interval=(30, 140),
+                        return_type="Entrances",
+                    )
+                    exits = generate_exits_furthest(
+                        list(flatten(new_room)), entrances
+                    )
+                    has_entrance_and_exit(entrances + exits)
+                    break
+                except MissingEntranceOrExit:
+                    continue
+            pillars = generate_pillars(list(flatten(new_room)))
+            pe = []
+            if generation == "SIMPLE":
+                name = f"RMA_ICGEN_{tag.upper()}_GENERAL_SIMPLE{room_num}.json"
+                room_name = f"{tag.upper()}_GENERAL_SIMPLE"
+            elif generation == "REFINERY":
+                name = f"RMA_ICGEN_{tag.upper()}_GENERAL_REFINERY_ESCORT{room_num}.json"
+                room_name = f"{tag.upper()}_GENERAL_REFINERY_ESCORT"
+            elif generation == "REFINERY_CUSTOMROOMS":
+                name = f"RMA_ICGEN_{tag.upper()}_FLAT{room_num}.json"
+                room_name = f"{tag.upper()}_FLAT"
+            else:
+                name = f"RMA_ICGEN_{tag.upper()}_GENERAL{room_num}.json"
+                room_name = f"{tag.upper()}_GENERAL"
+
+            room_json = build_json_multiple_ffill(
+                traversal_path,
+                new_room,
+                entrances + exits,
+                pillars,
+                room_num,
+                room_name,
+                {"bounds": 4000, "tags": room_tag},
+                pe,
+            )
+
+            try:
+                with open(f"room_log_{generation}.txt", "a") as logfile:
+                    logfile.write(f"{room_name}{room_num} {room}\n")
+            except Exception as e:
+                logging.error(f"Couldn't write {name} on logfile: {e}")
+
+            try:
+                path = Path("generated")
+                path.mkdir(parents=True, exist_ok=True)
+                with open(f"generated/{name}", "w") as f:
+                    json.dump(room_json, f, indent=4)
+                logging.info(f"Written {name} to generated/{name}")
+            except Exception as e:
+                logging.error(f"Couldn't write {name}: {e}")
