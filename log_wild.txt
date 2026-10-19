@@ -1,0 +1,2 @@
+GC ('Nonlinear Scale', 'G', ('DLA', 'C'))
+OHiBhHR ('Overlap Combine', 'O', ('Twist', 'H', ('Scatter Distortion', 'i', ('Random Walk', 'B'))), ('Barrel Distortion', 'h', ('Twist', 'H', ('Tunnel', 'R'))))

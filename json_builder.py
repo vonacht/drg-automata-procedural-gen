@@ -578,6 +578,171 @@ def sample_point_in_disk(disk):
     return (x, y, z)
 
 
+def is_point_inside_any_hemisphere(point, hemispheres):
+    """Checks if a 3D point is inside any dome-up hemisphere."""
+    x, y, z = point
+    for h in hemispheres:
+        cx, cy, cz = h["center"]
+        r = h["radius"]
+        # Point must be above the flat cap (z >= cz) and inside the spherical shell radius
+        if (
+            z >= cz
+            and (x - cx) ** 2 + (y - cy) ** 2 + (z - cz) ** 2 < (r * 0.95) ** 2
+        ):
+            return True
+    return False
+
+
+def get_floor_and_pillar_height(x, y, hemispheres, min_pillar_height=1.0):
+    """
+    Finds the floor elevation and calculates total pillar height up to the ceiling.
+    Returns (z_floor, pillar_height) or None if point is invalid or ceiling is too low.
+    """
+    candidate_floors = []
+
+    # 1. Identify all hemispheres that contain (x, y) horizontally
+    for h in hemispheres:
+        cx, cy, cz = h["center"]
+        r = h["radius"]
+        dist_sq = (x - cx) ** 2 + (y - cy) ** 2
+
+        if (
+            dist_sq < (r * 0.98) ** 2
+        ):  # Slight inset to keep pillars off extreme edge boundaries
+            # Flat floor level for dome-up orientation
+            candidate_floors.append(cz)
+
+    if not candidate_floors:
+        return None
+
+    # Cave floor at (x, y) is the lowest overlapping flat base
+    z_floor = min(candidate_floors)
+
+    # 2. Raycast upward to find highest ceiling point within overlapping domes
+    ceiling_z_candidates = []
+    for h in hemispheres:
+        cx, cy, cz = h["center"]
+        r = h["radius"]
+        dist_sq = (x - cx) ** 2 + (y - cy) ** 2
+
+        if dist_sq < r**2:
+            dz = math.sqrt(r**2 - dist_sq)
+            z_ceiling = cz + dz
+
+            # Ceiling point must not be hollowed out inside a higher overlapping dome
+            if not is_point_inside_any_hemisphere(
+                (x, y, z_ceiling + 0.1), hemispheres
+            ):
+                ceiling_z_candidates.append(z_ceiling)
+
+    if not ceiling_z_candidates:
+        return None
+
+    z_ceiling = max(ceiling_z_candidates)
+    pillar_height = z_ceiling - z_floor
+
+    # Filter out tight crawlspaces where pillars wouldn't fit
+    if pillar_height < min_pillar_height:
+        return None
+
+    return z_floor, pillar_height
+
+
+def sample_pillars(
+    hemisphere_groups, min_dist=5.0, min_height=1.5, candidates_per_step=30
+):
+    """
+    Samples Poisson-distributed pillars with floor position and total vertical height.
+
+    :param hemisphere_groups: List of lists of dicts [{'center': (x,y,z), 'radius': r}]
+    :param min_dist: Minimum horizontal spacing between pillars
+    :param min_height: Minimum required ceiling clearance for a pillar to generate
+    :return: List of dicts [{'position': (x, y, z_floor), 'height': height}]
+    """
+    hemispheres = [h for group in hemisphere_groups for h in group]
+    if not hemispheres:
+        return []
+
+    # 1. Bounding box calculation
+    min_x = min(h["center"][0] - h["radius"] for h in hemispheres)
+    max_x = max(h["center"][0] + h["radius"] for h in hemispheres)
+    min_y = min(h["center"][1] - h["radius"] for h in hemispheres)
+    max_y = max(h["center"][1] + h["radius"] for h in hemispheres)
+
+    # 2. Grid for spatial hashing
+    cell_size = min_dist / math.sqrt(2)
+    grid = {}
+
+    def get_grid_cell(p):
+        return (
+            int((p[0] - min_x) / cell_size),
+            int((p[1] - min_y) / cell_size),
+        )
+
+    # 3. Seed initial point
+    pillars = []
+    active_list = []
+
+    for _ in range(500):
+        rx = random.uniform(min_x, max_x)
+        ry = random.uniform(min_y, max_y)
+        res = get_floor_and_pillar_height(rx, ry, hemispheres, min_height)
+        if res is not None:
+            z_floor, height = res
+            init_pillar = {"position": (rx, ry, z_floor), "height": height}
+            pillars.append(init_pillar)
+            active_list.append(init_pillar)
+            grid[get_grid_cell((rx, ry))] = init_pillar
+            break
+
+    # 4. Poisson Disk Sampling
+    while active_list:
+        idx = random.randint(0, len(active_list) - 1)
+        base = active_list[idx]
+        bx, by, _ = base["position"]
+        found_valid = False
+
+        for _ in range(candidates_per_step):
+            angle = random.uniform(0, 2 * math.pi)
+            dist = random.uniform(min_dist, 2 * min_dist)
+            cx = bx + dist * math.cos(angle)
+            cy = by + dist * math.sin(angle)
+
+            res = get_floor_and_pillar_height(cx, cy, hemispheres, min_height)
+            if res is None:
+                continue
+
+            z_floor, height = res
+            cell = get_grid_cell((cx, cy))
+
+            # Spacing constraint check
+            is_valid = True
+            cell_x, cell_y = cell
+            for gx in range(cell_x - 2, cell_x + 3):
+                for gy in range(cell_y - 2, cell_y + 3):
+                    neighbor = grid.get((gx, gy))
+                    if neighbor:
+                        nx, ny, _ = neighbor["position"]
+                        if (cx - nx) ** 2 + (cy - ny) ** 2 < min_dist**2:
+                            is_valid = False
+                            break
+                if not is_valid:
+                    break
+
+            if is_valid:
+                new_pillar = {"position": (cx, cy, z_floor), "height": height}
+                pillars.append(new_pillar)
+                active_list.append(new_pillar)
+                grid[cell] = new_pillar
+                found_valid = True
+                break
+
+        if not found_valid:
+            active_list.pop(idx)
+
+    return pillars
+
+
 def select_pillars(spheres, n=3):
     if not spheres:
         return []
@@ -630,7 +795,8 @@ def generate_pillars(circles, method=None, height_mult=1):
     # suitable_circles = sorted(
     #     circles, key=lambda x: x["radius"], reverse=True
     # )[: math.ceil(len(circles) * 0.15)]
-    suitable_circles = select_pillars(circles, n=4)
+    suitable_circles = sample_pillars(circles, min_dist=1500)
+    # suitable_circles = []
 
     for c in suitable_circles:
         pillar_method = (
@@ -638,7 +804,7 @@ def generate_pillars(circles, method=None, height_mult=1):
                 [
                     # "stalactite",
                     # "stalagmite",
-                    # "straight",
+                    "straight",
                     # "balls",
                     "formation",
                 ]
@@ -649,10 +815,10 @@ def generate_pillars(circles, method=None, height_mult=1):
         match pillar_method:
             case "formation":
                 formation = generate_formation(
-                    origin=sample_point_in_disk(c),
-                    length=random.randint(500, 700),
-                    radius=random.randint(150, 300),
-                    n_segments=random.randint(3, 5),
+                    origin=c["position"],
+                    length=c["height"],
+                    radius=random.randint(150, 250),
+                    n_segments=random.randint(1, 5),
                 )
                 pillars.append(
                     [
@@ -712,27 +878,42 @@ def generate_pillars(circles, method=None, height_mult=1):
                     ]
                 )
             case "straight":
-                if c["radius"] < 400:
-                    continue
-                x, y, _ = sample_point_in_disk(c)
+                # if c["radius"] < 400:
+                #     continue
+                # x, y, _ = sample_point_in_disk(c)
+                # pillars.append(
+                #     [
+                #         {
+                #             "Location": (
+                #                 x,
+                #                 y,
+                #                 c["center"][2] - c["radius"] * 0.3,
+                #             ),
+                #             "Range": random.randrange(150, 200),
+                #             "NoiseRange": random.randrange(100, 150),
+                #         },
+                #         {
+                #             "Location": (
+                #                 x,
+                #                 y,
+                #                 c["center"][2]
+                #                 + c["radius"] * 1.3 * height_mult,
+                #             ),
+                #             "Range": random.randrange(150, 200),
+                #             "NoiseRange": random.randrange(100, 150),
+                #         },
+                #     ]
+                # )
+                x, y, z = c["position"]
                 pillars.append(
                     [
                         {
-                            "Location": (
-                                x,
-                                y,
-                                c["center"][2] - c["radius"] * 0.3,
-                            ),
+                            "Location": (x, y, z),
                             "Range": random.randrange(150, 200),
                             "NoiseRange": random.randrange(100, 150),
                         },
                         {
-                            "Location": (
-                                x,
-                                y,
-                                c["center"][2]
-                                + c["radius"] * 1.3 * height_mult,
-                            ),
+                            "Location": (x, y, z + c["height"]),
                             "Range": random.randrange(150, 200),
                             "NoiseRange": random.randrange(100, 150),
                         },
