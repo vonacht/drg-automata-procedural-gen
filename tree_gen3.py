@@ -67,15 +67,17 @@ ROOMS = {
 #     "s": 0,
 #     "t": 0,
 #     "u": 0,
+#     "x": 0,
 # }
 
 OPERATIONS = {
-    "s": 0.5,
+    "x": 0.5,
 }
 
 # OPERATIONS = {"g": 1, "h": 1, "i": 2, "j": 3}
 
-COMBINERS = {"O": 0.8, "T": 0.1, "Y": 0.1}
+COMBINERS = {"O": 0.4, "T": 0.1, "Y": 0.1, "v": 0.4}
+# COMBINERS = {"v": 0.1}
 
 # Chance that an operation is applied to a room:
 OPERATION_CHANCE = 0.95

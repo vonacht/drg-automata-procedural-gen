@@ -15,7 +15,9 @@ from graph_room import generate_cave_graph, generate_cave_graph_w_structure
 from tubes import kaleidoscope_room
 from lens_and_invert import lens, invert, complex_map, attractor_flow
 from tubes2 import lattice_room, polytope_room
+from morph import morph_rooms
 from character import generate_letter_room
+from periodic_wrap import periodic_wrap
 from typing import List, Dict, Optional
 from more_itertools import flatten
 from half_rotation import rotate_half
@@ -151,6 +153,8 @@ def parse(s, i=0):
                 return ("Complex Map", token, child), j
             case "u":
                 return ("Attractor Flow", token, child), j
+            case "x":
+                return ("Periodic Wrap", token, child), j
             case "z":
                 return ("Do Nothing", token, child), j
 
@@ -164,6 +168,8 @@ def parse(s, i=0):
                 return ("Tunnel Combine", token, left, right), k
             case "Y":
                 return ("Vertical Combine", token, left, right), k
+            case "v":
+                return ("Morph Combine", token, left, right), k
 
     raise ValueError(f"Unknown token: {token}")
 
@@ -937,6 +943,7 @@ ROOM_TRANSFORMS = {
     "s": invert,
     "t": complex_map,
     "u": attractor_flow,
+    "x": periodic_wrap,
     "z": do_nothing_transform,
 }
 
@@ -1074,6 +1081,7 @@ ROOM_COMBINERS = {
     "O": combine_overlap,
     "T": combine_tunnel,
     "Y": vertical_combine,
+    "v": morph_rooms,
 }
 
 
@@ -1752,7 +1760,7 @@ if __name__ == "__main__":
     # generation = REFINERY for refinery and escort rooms in custom rooms
     # generation = WILD for complex rooms (chaotic preset)
     # generation = SIMPLE for simpler rooms (neutral preset)
-    generation = "WILD"
+    generation = "SIMPLE"
     if generation == "REFINERY" or generation == "REFINERY_CUSTOMROOMS":
         tags = ["small", "medium", "big"]
         num_rooms = {"small": 40, "medium": 40, "big": 40}
@@ -1801,6 +1809,7 @@ if __name__ == "__main__":
                         if tag == "small":
                             room = generate(
                                 target_volume=random.choice([1, 1.5])
+                                # target_volume=3
                             )
                         elif tag == "medium" or tag == "end":
                             room = generate(
