@@ -545,7 +545,7 @@ def generate_tunnel(
     for segment_index in range(max_segments):
 
         kind = rng.choice(types, p=np.asarray(weights) / sum(weights))
-        print(kind)
+        # print(kind)
 
         # Don't make every segment crazy.
         segment_length = length / max_segments

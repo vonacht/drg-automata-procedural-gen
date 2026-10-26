@@ -1,0 +1,559 @@
+qGC ('Half Room Rotation', 'q', ('Nonlinear Scale', 'G', ('DLA', 'C')))
+True
+Kse ('Self Overlap', 'K', ('Inversion', 's', ('Small Graph Room', 'e')))
+True
+Ntn ('Negative Space', 'N', ('Complex Map', 't', ('Kaleidoscope Room', 'n')))
+True
+hGLZ ('Barrel Distortion', 'h', ('Nonlinear Scale', 'G', ('Taper', 'L', ('Fancy Tunnel', 'Z'))))
+True
+ia ('Scatter Distortion', 'i', ('Worley Room', 'a'))
+True
+NtU ('Negative Space', 'N', ('Complex Map', 't', ('Simple Noise', 'U')))
+True
+n ('Kaleidoscope Room', 'n')
+True
+xLIe ('Periodic Wrap', 'x', ('Taper', 'L', ('Rotation', 'I', ('Small Graph Room', 'e'))))
+True
+NJGn ('Negative Space', 'N', ('Perlin Heightmap', 'J', ('Nonlinear Scale', 'G', ('Kaleidoscope Room', 'n'))))
+True
+yU ('Echo', 'y', ('Simple Noise', 'U'))
+True
+NU ('Negative Space', 'N', ('Simple Noise', 'U'))
+True
+sW ('Inversion', 's', ('Worms', 'W'))
+True
+KV ('Self Overlap', 'K', ('Simple Erosion', 'V'))
+True
+sGKW ('Inversion', 's', ('Nonlinear Scale', 'G', ('Self Overlap', 'K', ('Worms', 'W'))))
+True
+uV ('Attractor Flow', 'u', ('Simple Erosion', 'V'))
+True
+te ('Complex Map', 't', ('Small Graph Room', 'e'))
+True
+NC ('Negative Space', 'N', ('DLA', 'C'))
+True
+tHyR ('Complex Map', 't', ('Twist', 'H', ('Echo', 'y', ('Tunnel', 'R'))))
+True
+qKW ('Half Room Rotation', 'q', ('Self Overlap', 'K', ('Worms', 'W')))
+True
+JW ('Perlin Heightmap', 'J', ('Worms', 'W'))
+True
+GKJV ('Nonlinear Scale', 'G', ('Self Overlap', 'K', ('Perlin Heightmap', 'J', ('Simple Erosion', 'V'))))
+True
+Z ('Fancy Tunnel', 'Z')
+True
+xn ('Periodic Wrap', 'x', ('Kaleidoscope Room', 'n'))
+True
+yJW ('Echo', 'y', ('Perlin Heightmap', 'J', ('Worms', 'W')))
+True
+NC ('Negative Space', 'N', ('DLA', 'C'))
+True
+GU ('Nonlinear Scale', 'G', ('Simple Noise', 'U'))
+True
+yrj ('Echo', 'y', ('Lens', 'r', ('Combined Room', 'j')))
+False
+Lj ('Taper', 'L', ('Combined Room', 'j'))
+True
+Kn ('Self Overlap', 'K', ('Kaleidoscope Room', 'n'))
+True
+Z ('Fancy Tunnel', 'Z')
+True
+j ('Combined Room', 'j')
+False
+j ('Combined Room', 'j')
+False
+hC ('Barrel Distortion', 'h', ('DLA', 'C'))
+False
+re ('Lens', 'r', ('Small Graph Room', 'e'))
+True
+JIn ('Perlin Heightmap', 'J', ('Rotation', 'I', ('Kaleidoscope Room', 'n')))
+True
+La ('Taper', 'L', ('Worley Room', 'a'))
+True
+iyia ('Scatter Distortion', 'i', ('Echo', 'y', ('Scatter Distortion', 'i', ('Worley Room', 'a'))))
+True
+ysua ('Echo', 'y', ('Inversion', 's', ('Attractor Flow', 'u', ('Worley Room', 'a'))))
+True
+NV ('Negative Space', 'N', ('Simple Erosion', 'V'))
+True
+tJn ('Complex Map', 't', ('Perlin Heightmap', 'J', ('Kaleidoscope Room', 'n')))
+True
+W ('Worms', 'W')
+True
+yn ('Echo', 'y', ('Kaleidoscope Room', 'n'))
+True
+hj ('Barrel Distortion', 'h', ('Combined Room', 'j'))
+False
+GP ('Nonlinear Scale', 'G', ('Character', 'P'))
+False
+n ('Kaleidoscope Room', 'n')
+True
+a ('Worley Room', 'a')
+True
+qZ ('Half Room Rotation', 'q', ('Fancy Tunnel', 'Z'))
+True
+KIW ('Self Overlap', 'K', ('Rotation', 'I', ('Worms', 'W')))
+True
+yj ('Echo', 'y', ('Combined Room', 'j'))
+False
+NHU ('Negative Space', 'N', ('Twist', 'H', ('Simple Noise', 'U')))
+True
+NC ('Negative Space', 'N', ('DLA', 'C'))
+False
+LiJa ('Taper', 'L', ('Scatter Distortion', 'i', ('Perlin Heightmap', 'J', ('Worley Room', 'a'))))
+True
+hue ('Barrel Distortion', 'h', ('Attractor Flow', 'u', ('Small Graph Room', 'e')))
+True
+Na ('Negative Space', 'N', ('Worley Room', 'a'))
+True
+uLqn ('Attractor Flow', 'u', ('Taper', 'L', ('Half Room Rotation', 'q', ('Kaleidoscope Room', 'n'))))
+True
+sj ('Inversion', 's', ('Combined Room', 'j'))
+True
+Ha ('Twist', 'H', ('Worley Room', 'a'))
+True
+R ('Tunnel', 'R')
+True
+hGU ('Barrel Distortion', 'h', ('Nonlinear Scale', 'G', ('Simple Noise', 'U')))
+True
+hra ('Barrel Distortion', 'h', ('Lens', 'r', ('Worley Room', 'a')))
+True
+uV ('Attractor Flow', 'u', ('Simple Erosion', 'V'))
+True
+V ('Simple Erosion', 'V')
+True
+KP ('Self Overlap', 'K', ('Character', 'P'))
+False
+rye ('Lens', 'r', ('Echo', 'y', ('Small Graph Room', 'e')))
+True
+qua ('Half Room Rotation', 'q', ('Attractor Flow', 'u', ('Worley Room', 'a')))
+True
+j ('Combined Room', 'j')
+False
+sIP ('Inversion', 's', ('Rotation', 'I', ('Character', 'P')))
+True
+W ('Worms', 'W')
+True
+rNZ ('Lens', 'r', ('Negative Space', 'N', ('Fancy Tunnel', 'Z')))
+True
+IuC ('Rotation', 'I', ('Attractor Flow', 'u', ('DLA', 'C')))
+True
+yR ('Echo', 'y', ('Tunnel', 'R'))
+True
+e ('Small Graph Room', 'e')
+True
+n ('Kaleidoscope Room', 'n')
+True
+W ('Worms', 'W')
+True
+IsP ('Rotation', 'I', ('Inversion', 's', ('Character', 'P')))
+True
+big_pillars
+xyZ ('Periodic Wrap', 'x', ('Echo', 'y', ('Fancy Tunnel', 'Z')))
+True
+qP ('Half Room Rotation', 'q', ('Character', 'P'))
+True
+Jj ('Perlin Heightmap', 'J', ('Combined Room', 'j'))
+True
+IyJW ('Rotation', 'I', ('Echo', 'y', ('Perlin Heightmap', 'J', ('Worms', 'W'))))
+True
+iR ('Scatter Distortion', 'i', ('Tunnel', 'R'))
+True
+JLn ('Perlin Heightmap', 'J', ('Taper', 'L', ('Kaleidoscope Room', 'n')))
+True
+iiC ('Scatter Distortion', 'i', ('Scatter Distortion', 'i', ('DLA', 'C')))
+True
+e ('Small Graph Room', 'e')
+True
+uiW ('Attractor Flow', 'u', ('Scatter Distortion', 'i', ('Worms', 'W')))
+True
+big_pillars
+sP ('Inversion', 's', ('Character', 'P'))
+True
+W ('Worms', 'W')
+True
+yj ('Echo', 'y', ('Combined Room', 'j'))
+False
+hKxC ('Barrel Distortion', 'h', ('Self Overlap', 'K', ('Periodic Wrap', 'x', ('DLA', 'C'))))
+False
+KGW ('Self Overlap', 'K', ('Nonlinear Scale', 'G', ('Worms', 'W')))
+True
+Krj ('Self Overlap', 'K', ('Lens', 'r', ('Combined Room', 'j')))
+False
+yn ('Echo', 'y', ('Kaleidoscope Room', 'n'))
+True
+xNW ('Periodic Wrap', 'x', ('Negative Space', 'N', ('Worms', 'W')))
+True
+LC ('Taper', 'L', ('DLA', 'C'))
+False
+yW ('Echo', 'y', ('Worms', 'W'))
+True
+P ('Character', 'P')
+False
+W ('Worms', 'W')
+True
+txe ('Complex Map', 't', ('Periodic Wrap', 'x', ('Small Graph Room', 'e')))
+True
+rxV ('Lens', 'r', ('Periodic Wrap', 'x', ('Simple Erosion', 'V')))
+False
+xe ('Periodic Wrap', 'x', ('Small Graph Room', 'e'))
+True
+U ('Simple Noise', 'U')
+True
+V ('Simple Erosion', 'V')
+True
+yrP ('Echo', 'y', ('Lens', 'r', ('Character', 'P')))
+False
+GJNa ('Nonlinear Scale', 'G', ('Perlin Heightmap', 'J', ('Negative Space', 'N', ('Worley Room', 'a'))))
+True
+a ('Worley Room', 'a')
+True
+KsxC ('Self Overlap', 'K', ('Inversion', 's', ('Periodic Wrap', 'x', ('DLA', 'C'))))
+True
+xW ('Periodic Wrap', 'x', ('Worms', 'W'))
+True
+iNU ('Scatter Distortion', 'i', ('Negative Space', 'N', ('Simple Noise', 'U')))
+True
+Lqe ('Taper', 'L', ('Half Room Rotation', 'q', ('Small Graph Room', 'e')))
+True
+qxW ('Half Room Rotation', 'q', ('Periodic Wrap', 'x', ('Worms', 'W')))
+True
+He ('Twist', 'H', ('Small Graph Room', 'e'))
+True
+uKa ('Attractor Flow', 'u', ('Self Overlap', 'K', ('Worley Room', 'a')))
+True
+R ('Tunnel', 'R')
+True
+R ('Tunnel', 'R')
+True
+Ln ('Taper', 'L', ('Kaleidoscope Room', 'n'))
+True
+LU ('Taper', 'L', ('Simple Noise', 'U'))
+True
+sR ('Inversion', 's', ('Tunnel', 'R'))
+True
+hrKU ('Barrel Distortion', 'h', ('Lens', 'r', ('Self Overlap', 'K', ('Simple Noise', 'U'))))
+True
+yZ ('Echo', 'y', ('Fancy Tunnel', 'Z'))
+True
+ie ('Scatter Distortion', 'i', ('Small Graph Room', 'e'))
+True
+tV ('Complex Map', 't', ('Simple Erosion', 'V'))
+True
+big_pillars
+NxV ('Negative Space', 'N', ('Periodic Wrap', 'x', ('Simple Erosion', 'V')))
+False
+KZ ('Self Overlap', 'K', ('Fancy Tunnel', 'Z'))
+True
+ysIW ('Echo', 'y', ('Inversion', 's', ('Rotation', 'I', ('Worms', 'W'))))
+True
+HKIC ('Twist', 'H', ('Self Overlap', 'K', ('Rotation', 'I', ('DLA', 'C'))))
+True
+LC ('Taper', 'L', ('DLA', 'C'))
+True
+IhZ ('Rotation', 'I', ('Barrel Distortion', 'h', ('Fancy Tunnel', 'Z')))
+True
+xxj ('Periodic Wrap', 'x', ('Periodic Wrap', 'x', ('Combined Room', 'j')))
+False
+C ('DLA', 'C')
+False
+sj ('Inversion', 's', ('Combined Room', 'j'))
+True
+rU ('Lens', 'r', ('Simple Noise', 'U'))
+True
+KHZ ('Self Overlap', 'K', ('Twist', 'H', ('Fancy Tunnel', 'Z')))
+True
+uLIW ('Attractor Flow', 'u', ('Taper', 'L', ('Rotation', 'I', ('Worms', 'W'))))
+True
+uKiU ('Attractor Flow', 'u', ('Self Overlap', 'K', ('Scatter Distortion', 'i', ('Simple Noise', 'U'))))
+True
+a ('Worley Room', 'a')
+True
+xU ('Periodic Wrap', 'x', ('Simple Noise', 'U'))
+True
+Ne ('Negative Space', 'N', ('Small Graph Room', 'e'))
+False
+ryIZ ('Lens', 'r', ('Echo', 'y', ('Rotation', 'I', ('Fancy Tunnel', 'Z'))))
+True
+NqxV ('Negative Space', 'N', ('Half Room Rotation', 'q', ('Periodic Wrap', 'x', ('Simple Erosion', 'V'))))
+False
+tLU ('Complex Map', 't', ('Taper', 'L', ('Simple Noise', 'U')))
+True
+iHZ ('Scatter Distortion', 'i', ('Twist', 'H', ('Fancy Tunnel', 'Z')))
+True
+LR ('Taper', 'L', ('Tunnel', 'R'))
+True
+V ('Simple Erosion', 'V')
+True
+qGU ('Half Room Rotation', 'q', ('Nonlinear Scale', 'G', ('Simple Noise', 'U')))
+True
+Ln ('Taper', 'L', ('Kaleidoscope Room', 'n'))
+True
+yU ('Echo', 'y', ('Simple Noise', 'U'))
+True
+P ('Character', 'P')
+False
+C ('DLA', 'C')
+False
+Z ('Fancy Tunnel', 'Z')
+True
+j ('Combined Room', 'j')
+False
+IR ('Rotation', 'I', ('Tunnel', 'R'))
+True
+irU ('Scatter Distortion', 'i', ('Lens', 'r', ('Simple Noise', 'U')))
+True
+e ('Small Graph Room', 'e')
+True
+a ('Worley Room', 'a')
+True
+IC ('Rotation', 'I', ('DLA', 'C'))
+True
+siyj ('Inversion', 's', ('Scatter Distortion', 'i', ('Echo', 'y', ('Combined Room', 'j'))))
+True
+LHR ('Taper', 'L', ('Twist', 'H', ('Tunnel', 'R')))
+True
+GLIe ('Nonlinear Scale', 'G', ('Taper', 'L', ('Rotation', 'I', ('Small Graph Room', 'e'))))
+True
+hKR ('Barrel Distortion', 'h', ('Self Overlap', 'K', ('Tunnel', 'R')))
+True
+big_pillars
+W ('Worms', 'W')
+True
+Na ('Negative Space', 'N', ('Worley Room', 'a'))
+True
+NIxC ('Negative Space', 'N', ('Rotation', 'I', ('Periodic Wrap', 'x', ('DLA', 'C'))))
+True
+qNU ('Half Room Rotation', 'q', ('Negative Space', 'N', ('Simple Noise', 'U')))
+False
+Lj ('Taper', 'L', ('Combined Room', 'j'))
+False
+iHKe ('Scatter Distortion', 'i', ('Twist', 'H', ('Self Overlap', 'K', ('Small Graph Room', 'e'))))
+True
+xJLV ('Periodic Wrap', 'x', ('Perlin Heightmap', 'J', ('Taper', 'L', ('Simple Erosion', 'V'))))
+False
+xLa ('Periodic Wrap', 'x', ('Taper', 'L', ('Worley Room', 'a')))
+True
+sIn ('Inversion', 's', ('Rotation', 'I', ('Kaleidoscope Room', 'n')))
+True
+JJKj ('Perlin Heightmap', 'J', ('Perlin Heightmap', 'J', ('Self Overlap', 'K', ('Combined Room', 'j'))))
+False
+HKR ('Twist', 'H', ('Self Overlap', 'K', ('Tunnel', 'R')))
+True
+HuW ('Twist', 'H', ('Attractor Flow', 'u', ('Worms', 'W')))
+True
+GP ('Nonlinear Scale', 'G', ('Character', 'P'))
+False
+Jn ('Perlin Heightmap', 'J', ('Kaleidoscope Room', 'n'))
+True
+NHW ('Negative Space', 'N', ('Twist', 'H', ('Worms', 'W')))
+True
+NU ('Negative Space', 'N', ('Simple Noise', 'U'))
+False
+hHLV ('Barrel Distortion', 'h', ('Twist', 'H', ('Taper', 'L', ('Simple Erosion', 'V'))))
+True
+Iye ('Rotation', 'I', ('Echo', 'y', ('Small Graph Room', 'e')))
+True
+LHia ('Taper', 'L', ('Twist', 'H', ('Scatter Distortion', 'i', ('Worley Room', 'a'))))
+True
+HKxW ('Twist', 'H', ('Self Overlap', 'K', ('Periodic Wrap', 'x', ('Worms', 'W'))))
+True
+hNsn ('Barrel Distortion', 'h', ('Negative Space', 'N', ('Inversion', 's', ('Kaleidoscope Room', 'n'))))
+True
+HKZ ('Twist', 'H', ('Self Overlap', 'K', ('Fancy Tunnel', 'Z')))
+True
+qxW ('Half Room Rotation', 'q', ('Periodic Wrap', 'x', ('Worms', 'W')))
+True
+NP ('Negative Space', 'N', ('Character', 'P'))
+False
+yxuV ('Echo', 'y', ('Periodic Wrap', 'x', ('Attractor Flow', 'u', ('Simple Erosion', 'V'))))
+True
+e ('Small Graph Room', 'e')
+True
+Nn ('Negative Space', 'N', ('Kaleidoscope Room', 'n'))
+True
+JV ('Perlin Heightmap', 'J', ('Simple Erosion', 'V'))
+True
+R ('Tunnel', 'R')
+True
+C ('DLA', 'C')
+False
+j ('Combined Room', 'j')
+False
+V ('Simple Erosion', 'V')
+True
+xHW ('Periodic Wrap', 'x', ('Twist', 'H', ('Worms', 'W')))
+True
+n ('Kaleidoscope Room', 'n')
+True
+HGKa ('Twist', 'H', ('Nonlinear Scale', 'G', ('Self Overlap', 'K', ('Worley Room', 'a'))))
+True
+Lj ('Taper', 'L', ('Combined Room', 'j'))
+True
+tyj ('Complex Map', 't', ('Echo', 'y', ('Combined Room', 'j')))
+False
+rqyZ ('Lens', 'r', ('Half Room Rotation', 'q', ('Echo', 'y', ('Fancy Tunnel', 'Z'))))
+True
+tP ('Complex Map', 't', ('Character', 'P'))
+False
+C ('DLA', 'C')
+False
+qZ ('Half Room Rotation', 'q', ('Fancy Tunnel', 'Z'))
+True
+ya ('Echo', 'y', ('Worley Room', 'a'))
+True
+xxV ('Periodic Wrap', 'x', ('Periodic Wrap', 'x', ('Simple Erosion', 'V')))
+True
+KR ('Self Overlap', 'K', ('Tunnel', 'R'))
+True
+HLe ('Twist', 'H', ('Taper', 'L', ('Small Graph Room', 'e')))
+True
+tyse ('Complex Map', 't', ('Echo', 'y', ('Inversion', 's', ('Small Graph Room', 'e'))))
+True
+rra ('Lens', 'r', ('Lens', 'r', ('Worley Room', 'a')))
+True
+uJW ('Attractor Flow', 'u', ('Perlin Heightmap', 'J', ('Worms', 'W')))
+True
+GyqC ('Nonlinear Scale', 'G', ('Echo', 'y', ('Half Room Rotation', 'q', ('DLA', 'C'))))
+False
+tJKV ('Complex Map', 't', ('Perlin Heightmap', 'J', ('Self Overlap', 'K', ('Simple Erosion', 'V'))))
+True
+qyU ('Half Room Rotation', 'q', ('Echo', 'y', ('Simple Noise', 'U')))
+True
+yP ('Echo', 'y', ('Character', 'P'))
+False
+Kj ('Self Overlap', 'K', ('Combined Room', 'j'))
+False
+KhiZ ('Self Overlap', 'K', ('Barrel Distortion', 'h', ('Scatter Distortion', 'i', ('Fancy Tunnel', 'Z'))))
+True
+big_pillars
+LqZ ('Taper', 'L', ('Half Room Rotation', 'q', ('Fancy Tunnel', 'Z')))
+False
+NiU ('Negative Space', 'N', ('Scatter Distortion', 'i', ('Simple Noise', 'U')))
+True
+V ('Simple Erosion', 'V')
+True
+Jj ('Perlin Heightmap', 'J', ('Combined Room', 'j'))
+True
+KW ('Self Overlap', 'K', ('Worms', 'W'))
+True
+U ('Simple Noise', 'U')
+True
+tqLe ('Complex Map', 't', ('Half Room Rotation', 'q', ('Taper', 'L', ('Small Graph Room', 'e'))))
+True
+W ('Worms', 'W')
+True
+JuNj ('Perlin Heightmap', 'J', ('Attractor Flow', 'u', ('Negative Space', 'N', ('Combined Room', 'j'))))
+True
+qLW ('Half Room Rotation', 'q', ('Taper', 'L', ('Worms', 'W')))
+True
+iZ ('Scatter Distortion', 'i', ('Fancy Tunnel', 'Z'))
+True
+HZ ('Twist', 'H', ('Fancy Tunnel', 'Z'))
+True
+JJW ('Perlin Heightmap', 'J', ('Perlin Heightmap', 'J', ('Worms', 'W')))
+True
+tqV ('Complex Map', 't', ('Half Room Rotation', 'q', ('Simple Erosion', 'V')))
+True
+P ('Character', 'P')
+False
+P ('Character', 'P')
+False
+hGV ('Barrel Distortion', 'h', ('Nonlinear Scale', 'G', ('Simple Erosion', 'V')))
+True
+yU ('Echo', 'y', ('Simple Noise', 'U'))
+True
+R ('Tunnel', 'R')
+True
+qC ('Half Room Rotation', 'q', ('DLA', 'C'))
+False
+sP ('Inversion', 's', ('Character', 'P'))
+True
+KtW ('Self Overlap', 'K', ('Complex Map', 't', ('Worms', 'W')))
+True
+rsZ ('Lens', 'r', ('Inversion', 's', ('Fancy Tunnel', 'Z')))
+True
+GLHj ('Nonlinear Scale', 'G', ('Taper', 'L', ('Twist', 'H', ('Combined Room', 'j'))))
+True
+e ('Small Graph Room', 'e')
+True
+sV ('Inversion', 's', ('Simple Erosion', 'V'))
+True
+rKHW ('Lens', 'r', ('Self Overlap', 'K', ('Twist', 'H', ('Worms', 'W'))))
+True
+LihU ('Taper', 'L', ('Scatter Distortion', 'i', ('Barrel Distortion', 'h', ('Simple Noise', 'U'))))
+True
+LU ('Taper', 'L', ('Simple Noise', 'U'))
+True
+hR ('Barrel Distortion', 'h', ('Tunnel', 'R'))
+True
+U ('Simple Noise', 'U')
+True
+IxU ('Rotation', 'I', ('Periodic Wrap', 'x', ('Simple Noise', 'U')))
+True
+hV ('Barrel Distortion', 'h', ('Simple Erosion', 'V'))
+True
+big_pillars
+a ('Worley Room', 'a')
+True
+j ('Combined Room', 'j')
+False
+n ('Kaleidoscope Room', 'n')
+True
+Nn ('Negative Space', 'N', ('Kaleidoscope Room', 'n'))
+True
+NV ('Negative Space', 'N', ('Simple Erosion', 'V'))
+False
+KHtn ('Self Overlap', 'K', ('Twist', 'H', ('Complex Map', 't', ('Kaleidoscope Room', 'n'))))
+True
+rKun ('Lens', 'r', ('Self Overlap', 'K', ('Attractor Flow', 'u', ('Kaleidoscope Room', 'n'))))
+True
+LC ('Taper', 'L', ('DLA', 'C'))
+False
+GtNV ('Nonlinear Scale', 'G', ('Complex Map', 't', ('Negative Space', 'N', ('Simple Erosion', 'V'))))
+False
+yuIU ('Echo', 'y', ('Attractor Flow', 'u', ('Rotation', 'I', ('Simple Noise', 'U'))))
+True
+tJyU ('Complex Map', 't', ('Perlin Heightmap', 'J', ('Echo', 'y', ('Simple Noise', 'U'))))
+True
+Ka ('Self Overlap', 'K', ('Worley Room', 'a'))
+True
+Z ('Fancy Tunnel', 'Z')
+False
+n ('Kaleidoscope Room', 'n')
+True
+ytta ('Echo', 'y', ('Complex Map', 't', ('Complex Map', 't', ('Worley Room', 'a'))))
+True
+iZ ('Scatter Distortion', 'i', ('Fancy Tunnel', 'Z'))
+False
+GZ ('Nonlinear Scale', 'G', ('Fancy Tunnel', 'Z'))
+True
+KW ('Self Overlap', 'K', ('Worms', 'W'))
+True
+IZ ('Rotation', 'I', ('Fancy Tunnel', 'Z'))
+True
+yJJn ('Echo', 'y', ('Perlin Heightmap', 'J', ('Perlin Heightmap', 'J', ('Kaleidoscope Room', 'n'))))
+True
+yuuU ('Echo', 'y', ('Attractor Flow', 'u', ('Attractor Flow', 'u', ('Simple Noise', 'U'))))
+True
+NU ('Negative Space', 'N', ('Simple Noise', 'U'))
+True
+sLP ('Inversion', 's', ('Taper', 'L', ('Character', 'P')))
+True
+ya ('Echo', 'y', ('Worley Room', 'a'))
+True
+Nj ('Negative Space', 'N', ('Combined Room', 'j'))
+False
+JtKa ('Perlin Heightmap', 'J', ('Complex Map', 't', ('Self Overlap', 'K', ('Worley Room', 'a'))))
+True
+KrIj ('Self Overlap', 'K', ('Lens', 'r', ('Rotation', 'I', ('Combined Room', 'j'))))
+True
+irV ('Scatter Distortion', 'i', ('Lens', 'r', ('Simple Erosion', 'V')))
+True
+big_pillars
+Kn ('Self Overlap', 'K', ('Kaleidoscope Room', 'n'))
+True
+V ('Simple Erosion', 'V')
+True
+R ('Tunnel', 'R')
+True

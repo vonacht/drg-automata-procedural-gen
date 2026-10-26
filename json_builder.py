@@ -1033,20 +1033,40 @@ def build_json_multiple_ffill(
         result["FloodFillLines"][f"FFill_{jj}"] = lines
 
     result["Entrances"] = {}
-    for ii, entrance in enumerate(entrances):
+    for ii, entrance in enumerate(entrances["entrances"]):
         result["Entrances"].update(
             {
                 f"Entrance_{ii}": {
                     "Location": {
-                        "X": entrance[0],
-                        "Y": entrance[1],
-                        "Z": entrance[2],
+                        "X": entrance["position"][0],
+                        "Y": entrance["position"][1],
+                        "Z": entrance["position"][2],
                     },
-                    "Type": entrance[-1],
+                    "Type": "Entrance",
                     "Direction": {
-                        "Roll": entrance[3],
-                        "Pitch": entrance[4],
-                        "Yaw": entrance[5],
+                        "Roll": entrance["roll"],
+                        "Pitch": entrance["pitch"],
+                        "Yaw": entrance["yaw"],
+                    },
+                }
+            }
+        )
+    for ii, entrance in enumerate(
+        entrances["exits"], len(entrances["entrances"])
+    ):
+        result["Entrances"].update(
+            {
+                f"Entrance_{ii}": {
+                    "Location": {
+                        "X": entrance["position"][0],
+                        "Y": entrance["position"][1],
+                        "Z": entrance["position"][2],
+                    },
+                    "Type": "Exit",
+                    "Direction": {
+                        "Roll": entrance["roll"],
+                        "Pitch": entrance["pitch"],
+                        "Yaw": entrance["yaw"],
                     },
                 }
             }

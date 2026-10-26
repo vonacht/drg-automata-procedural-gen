@@ -10,6 +10,7 @@ def periodic_wrap(
     yaw=None,
     seams="split",
     min_points=2,
+    split_min=4,
 ):
     """
     Wraps the room into a box smaller than itself: anything outside the box
@@ -67,34 +68,44 @@ def periodic_wrap(
     )
 
     aligned = len(path) == len(groups)
-    out_groups, out_path, base = [], [], 0
-    for gi, g in enumerate(groups):
-        if not g:
-            continue
-        pieces, cur = [], [0]
-        for i in range(1, len(g)):  # cut where the box cell changes
-            if (
-                seams == "split"
-                and (cell[base + i] != cell[base + i - 1]).any()
-            ):
-                pieces.append(cur)
-                cur = []
-            cur.append(i)
-        pieces.append(cur)
 
-        for piece in pieces:
-            if seams == "split" and len(piece) < min_points:
+    def assemble(mode):
+        out_groups, out_path, base = [], [], 0
+        for gi, g in enumerate(groups):
+            if not g:
                 continue
-            out_groups.append(
-                [
-                    {**g[i], "center": tuple(float(x) for x in new[base + i])}
-                    for i in piece
-                ]
-            )
-            if aligned:
-                pos = {old: n for n, old in enumerate(piece)}
-                out_path.append([pos[i] for i in path[gi] if i in pos])
-            else:
-                out_path.append(list(range(len(piece))))
-        base += len(g)
-    return out_groups, out_path
+            cut = (
+                mode == "split" and len(g) >= split_min
+            )  # short polylines are never cut
+            pieces, cur = [], [0]
+            for i in range(1, len(g)):
+                if cut and (cell[base + i] != cell[base + i - 1]).any():
+                    pieces.append(cur)
+                    cur = []
+                cur.append(i)
+            pieces.append(cur)
+
+            for piece in pieces:
+                if cut and len(piece) < min_points:
+                    continue
+                out_groups.append(
+                    [
+                        {
+                            **g[i],
+                            "center": tuple(float(x) for x in new[base + i]),
+                        }
+                        for i in piece
+                    ]
+                )
+                if aligned:
+                    pos = {old: n for n, old in enumerate(piece)}
+                    out_path.append([pos[i] for i in path[gi] if i in pos])
+                else:
+                    out_path.append(list(range(len(piece))))
+            base += len(g)
+        return out_groups, out_path
+
+    result = assemble(seams)
+    return (
+        result if result[0] else assemble("link")
+    )  # never return an empty room

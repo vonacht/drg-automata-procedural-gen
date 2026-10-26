@@ -24,9 +24,9 @@ from itertools import combinations
 #     "f": 2,
 # }
 
-ROOMS = {
-    "g": 1,
-}
+# ROOMS = {
+#     "g": 1,
+# }
 
 OPERATIONS = {
     "M": 1.5,

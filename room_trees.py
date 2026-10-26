@@ -13,13 +13,23 @@ from lsystem import generate_lsystem_room
 # from pit_rooms import generate_pit_room
 from graph_room import generate_cave_graph, generate_cave_graph_w_structure
 from tubes import kaleidoscope_room
-from lens_and_invert import lens, invert, complex_map, attractor_flow
+from lens_and_invert import (
+    lens,
+    invert_retry,
+    complex_map_retry,
+    attractor_flow_retry,
+    calibrate,
+    roll_interesting,
+)
 from tubes2 import lattice_room, polytope_room
-from morph import morph_rooms
+from morph import morph_rooms, crossover, braid, seam
 from character import generate_letter_room
 from periodic_wrap import periodic_wrap
+from bigpillars import generate_big_pillars
+from entrances_and_exits import place_doors, MissingEntranceOrExit_new
 from typing import List, Dict, Optional
 from more_itertools import flatten
+from echo_and_bypass import bypass, echo, negative_space, cave_in
 from half_rotation import rotate_half
 from worms import generate_3d_worm_cave_parameterized, generate_3d_worm_cave
 from scipy.ndimage import gaussian_filter, map_coordinates, zoom
@@ -53,9 +63,97 @@ from json_builder import (
     generate_entrances,
     build_json_multiple_ffill,
     generate_exits_furthest,
+    generate_PE_features,
 )
 
 from pillars_2 import generate_pillars
+
+
+def union_volume(room, rng=random, samples=20000, links=True, chunk=32):
+    """Monte Carlo volume of the room: the hemispheres plus, if links=True, the tubes
+    the engine draws between consecutive points of each polyline."""
+    groups = room[0]
+    sph = [s for g in groups for s in g]
+    C = np.array([s["center"] for s in sph], dtype=float)
+    R = np.array([s["radius"] for s in sph], dtype=float)
+    lo = np.array([(C[:, 0] - R).min(), (C[:, 1] - R).min(), C[:, 2].min()])
+    hi = np.array(
+        [(C[:, 0] + R).max(), (C[:, 1] + R).max(), (C[:, 2] + R).max()]
+    )
+    gen = np.random.default_rng(rng.randrange(2**32))
+    P = lo + gen.random((samples, 3)) * (hi - lo)
+    inside = np.zeros(samples, dtype=bool)
+
+    for s in range(0, len(C), 64):  # the spheres themselves
+        d = P[:, None, :] - C[None, s : s + 64]
+        inside |= (
+            ((d**2).sum(-1) <= R[None, s : s + 64] ** 2) & (d[..., 2] >= 0)
+        ).any(axis=1)
+
+    if links:  # the tubes between consecutive points
+        pairs = [(a, b) for g in groups for a, b in zip(g, g[1:])]
+        if pairs:
+            A = np.array([a["center"] for a, _ in pairs], dtype=float)
+            B = np.array([b["center"] for _, b in pairs], dtype=float)
+            RA = np.array([a["radius"] for a, _ in pairs], dtype=float)
+            RB = np.array([b["radius"] for _, b in pairs], dtype=float)
+            AB = B - A
+            L2 = np.maximum((AB**2).sum(1), 1e-9)
+            for s in range(0, len(A), chunk):
+                a, ab, l2 = (
+                    A[s : s + chunk],
+                    AB[s : s + chunk],
+                    L2[s : s + chunk],
+                )
+                ap = P[:, None, :] - a[None]
+                t = np.clip(
+                    (ap * ab[None]).sum(-1) / l2[None], 0.0, 1.0
+                )  # nearest point on the segment
+                q = a[None] + t[..., None] * ab[None]
+                rad = (
+                    RA[s : s + chunk][None]
+                    + t * (RB - RA)[s : s + chunk][None]
+                )  # radius there
+                ok = (np.linalg.norm(P[:, None, :] - q, axis=-1) <= rad) & (
+                    P[:, None, 2] >= q[..., 2]
+                )
+                inside |= ok.any(axis=1)
+    return float(np.prod(hi - lo) * inside.mean())
+
+
+def scale_room(room, factor):
+    """Uniformly scales positions and radii about the room's center."""
+    groups, path = room
+    C = np.array([s["center"] for g in groups for s in g], dtype=float)
+    mid = (C.min(0) + C.max(0)) / 2
+    out = [
+        [
+            {
+                **s,
+                "center": tuple(
+                    float(x)
+                    for x in mid + (np.array(s["center"]) - mid) * factor
+                ),
+                "radius": s["radius"] * factor,
+            }
+            for s in g
+        ]
+        for g in groups
+    ]
+    return out, [list(p) for p in path]
+
+
+def normalize_volume(room, target, rng=random, clamp=(0.6, 1.8)):
+    """Scales the room uniformly so its volume approaches `target`.
+    clamp:   limits on the length scale (not the volume). A tight clamp means a room that
+             is far off stays somewhat off, so it's better to fix its source.
+    """
+    V = union_volume(room, rng)
+    if V <= 0:
+        return room
+    f = min(max((target / V) ** (1 / 3), clamp[0]), clamp[1])
+    # print("scale_factor", f)
+    return scale_room(room, f)
 
 
 def parse(s, i=0):
@@ -99,8 +197,6 @@ def parse(s, i=0):
                 return ("Small Graph Room", token), i + 1
             case "f":
                 return ("Big Graph Room", token), i + 1
-            case "g":
-                return ("Blur Room", token), i + 1
             case "j":
                 return ("Combined Room", token), i + 1
             case "k":
@@ -109,10 +205,6 @@ def parse(s, i=0):
                 return ("Atomic Room", token), i + 1
             case "n":
                 return ("Kaleidoscope Room", token), i + 1
-            case "o":
-                return ("Lattice Room", token), i + 1
-            case "p":
-                return ("Polytope Room", token), i + 1
 
     if token in OPERATIONS:
         child, j = parse(s, i + 1)
@@ -155,6 +247,12 @@ def parse(s, i=0):
                 return ("Attractor Flow", token, child), j
             case "x":
                 return ("Periodic Wrap", token, child), j
+            case "y":
+                return ("Echo", token, child), j
+            case "w":
+                return ("Cave-In", token, child), j
+            case "N":
+                return ("Negative Space", token, child), j
             case "z":
                 return ("Do Nothing", token, child), j
 
@@ -170,6 +268,12 @@ def parse(s, i=0):
                 return ("Vertical Combine", token, left, right), k
             case "v":
                 return ("Morph Combine", token, left, right), k
+            case "o":
+                return ("Seam Combine", token, left, right), k
+            case "p":
+                return ("Braid Combine", token, left, right), k
+            case "g":
+                return ("Crossover Combine", token, left, right), k
 
     raise ValueError(f"Unknown token: {token}")
 
@@ -179,7 +283,10 @@ def build(node):
 
     if kind in ROOMS:
         room = generate_room(node[1])
-        return room
+        # print(room)
+        # print("union volume", node[1], union_volume(room) / 1e6)
+        scaled_room = normalize_volume(room, 12000 * 1e6)
+        return scaled_room
 
     if kind in OPERATIONS:
         transform = node[1]
@@ -932,7 +1039,6 @@ ROOM_TRANSFORMS = {
     "K": self_overlap,
     "L": taper_transform,
     "M": mirror_room_transform,
-    "N": flat_sweep,
     "Q": vertical_stack,
     "S": room_half_drop,
     "h": bulge,
@@ -940,10 +1046,13 @@ ROOM_TRANSFORMS = {
     "l": pit_transform,
     "q": rotate_half,
     "r": lens,
-    "s": invert,
-    "t": complex_map,
-    "u": attractor_flow,
+    "s": invert_retry,
+    "t": complex_map_retry,
+    "u": attractor_flow_retry,
     "x": periodic_wrap,
+    "y": echo,
+    "w": cave_in,
+    "N": negative_space,
     "z": do_nothing_transform,
 }
 
@@ -1082,6 +1191,9 @@ ROOM_COMBINERS = {
     "T": combine_tunnel,
     "Y": vertical_combine,
     "v": morph_rooms,
+    "o": seam,
+    "p": braid,
+    "g": crossover,
 }
 
 
@@ -1755,11 +1867,33 @@ class MissingEntranceOrExit(Exception):
     pass
 
 
-if __name__ == "__main__":
-
+def run():
     # generation = REFINERY for refinery and escort rooms in custom rooms
     # generation = WILD for complex rooms (chaotic preset)
     # generation = SIMPLE for simpler rooms (neutral preset)
+    with open("ref/volume_1.json", "r") as f:
+        ref_1 = json.load(f)
+    with open("ref/volume_1.5.json", "r") as f:
+        ref_1_5 = json.load(f)
+    with open("ref/volume_2.json", "r") as f:
+        ref_2 = json.load(f)
+    with open("ref/volume_2.5.json", "r") as f:
+        ref_2_5 = json.load(f)
+    with open("ref/volume_3.json", "r") as f:
+        ref_3 = json.load(f)
+    with open("ref/volume_3.5.json", "r") as f:
+        ref_3_5 = json.load(f)
+    with open("ref/volume_4.json", "r") as f:
+        ref_4 = json.load(f)
+    calibration_data = {
+        1: ref_1,
+        1.5: ref_1_5,
+        2: ref_2,
+        2.5: ref_2_5,
+        3: ref_3,
+        3.5: ref_3_5,
+        4: ref_4,
+    }
     generation = "SIMPLE"
     if generation == "REFINERY" or generation == "REFINERY_CUSTOMROOMS":
         tags = ["small", "medium", "big"]
@@ -1767,6 +1901,7 @@ if __name__ == "__main__":
     else:
         tags = ["small", "medium", "big", "end"]
         num_rooms = {"small": 300, "medium": 300, "big": 300, "end": 50}
+        # num_rooms = {"small": 3, "medium": 3, "big": 3, "end": 5}
     for tag in tags:
         for i in range(num_rooms[tag]):
             while True:
@@ -1792,37 +1927,69 @@ if __name__ == "__main__":
                     room_num = i
                     if generation == "WILD":
                         if tag == "small":
-                            room = generate(
-                                target_volume=random.choice([1, 1.5]),
+                            target_volume = 1.5
+                            new_room, traversal_path = roll_interesting(
+                                lambda r: make_room(target_volume),
+                                random,
+                                calibration_data[target_volume],
                             )
+
                         elif tag == "medium" or tag == "end":
-                            room = generate(
-                                target_volume=random.choice([1, 1.5, 2]),
+                            target_volume = 2
+                            new_room, traversal_path = roll_interesting(
+                                lambda r: make_room(target_volume),
+                                random,
+                                calibration_data[target_volume],
                             )
                         else:
-                            room = generate(
-                                target_volume=random.choices(
-                                    [2, 3, 4], weights=[0.2, 0.65, 0.15], k=1
-                                )[0],
+                            target_volume = random.choices(
+                                [2, 3, 4], weights=[0.15, 0.7, 0.15], k=1
+                            )[0]
+                            new_room, traversal_path = roll_interesting(
+                                lambda r: make_room(target_volume),
+                                random,
+                                calibration_data[target_volume],
                             )
                     elif generation == "SIMPLE":
                         if tag == "small":
-                            room = generate(
-                                target_volume=random.choice([1, 1.5])
-                                # target_volume=3
+                            target_volume = random.choice([1, 1.5])
+                            new_room, traversal_path = roll_interesting(
+                                lambda r: make_room(target_volume),
+                                random,
+                                calibration_data[target_volume],
                             )
+                            # room = generate(
+                            #     target_volume=random.choice([1, 1.5])
+                            #     # target_volume=3
+                            # )
                         elif tag == "medium" or tag == "end":
-                            room = generate(
-                                target_volume=random.choice([1, 1.5, 2]),
+                            target_volume = random.choice([1.5, 2])
+                            new_room, traversal_path = roll_interesting(
+                                lambda r: make_room(target_volume),
+                                random,
+                                calibration_data[target_volume],
                             )
+                            # room = generate(
+                            #     target_volume=random.choice([1.5, 2]),
+                            # )
                         else:
-                            room = generate(
-                                target_volume=random.choices(
-                                    [1.5, 2, 2.5, 3],
-                                    weights=[0.15, 0.35, 0.35, 0.15],
-                                    k=1,
-                                )[0],
+                            target_volume = random.choices(
+                                [1.5, 2, 2.5, 3],
+                                weights=[0.15, 0.35, 0.35, 0.35],
+                                k=1,
+                            )[0]
+                            new_room, traversal_path = roll_interesting(
+                                lambda r: make_room(target_volume),
+                                random,
+                                calibration_data[target_volume],
                             )
+                            # room = generate(
+                            #     target_volume=random.choices(
+                            #         [1.5, 2, 2.5, 3],
+                            #         weights=[0.15, 0.35, 0.35, 0.35],
+                            #         k=1,
+                            #     )[0],
+                            # )
                     else:
                         if tag == "small":
                             room = generate(target_volume=1)
@@ -1837,27 +2004,32 @@ if __name__ == "__main__":
                                 )[0],
                             )
 
-                    tree, _ = parse(room)
-                    print(room, tree)
-                    new_room, traversal_path = build(tree)
+                    # tree, _ = parse(room)
+                    # print(room, tree)
+                    # new_room, traversal_path = build(tree)
+                    if len(new_room) == 0:
+                        raise MissingEntranceOrExit
                     if len(new_room) == 1 and len(new_room[0]) == 1:
                         raise MissingEntranceOrExit
                     # print(new_room, traversal_path)
-                    entrances = generate_entrances(
-                        list(flatten(new_room)),
-                        exit_interval=(200, 280),
-                        entrance_interval=(30, 140),
-                        return_type="Entrances",
-                    )
-                    exits = generate_exits_furthest(
-                        list(flatten(new_room)), entrances
-                    )
-                    has_entrance_and_exit(entrances + exits)
+                    # entrances = generate_entrances(
+                    #     list(flatten(new_room)),
+                    #     exit_interval=(200, 280),
+                    #     entrance_interval=(30, 140),
+                    #     return_type="Entrances",
+                    # )
+                    # exits = generate_exits_furthest(
+                    #     list(flatten(new_room)), entrances
+                    # )
+                    entrances = place_doors((new_room, traversal_path))
+                    # print(entrances)
+                    # has_entrance_and_exit(entrances + exits)
                     break
-                except MissingEntranceOrExit:
+                except (MissingEntranceOrExit, MissingEntranceOrExit_new):
                     continue
-            # pillars = generate_pillars(list(flatten(new_room)))
-            pillars = generate_pillars(new_room)
+            pillars = generate_pillars(new_room) + generate_big_pillars(
+                new_room
+            )
             # print(pillars)
             pe = []
             if generation == "SIMPLE":
@@ -1876,7 +2048,7 @@ if __name__ == "__main__":
             room_json = build_json_multiple_ffill(
                 traversal_path,
                 new_room,
-                entrances + exits,
+                entrances,
                 pillars,
                 room_num,
                 room_name,
@@ -1898,3 +2070,28 @@ if __name__ == "__main__":
                 logging.info(f"Written {name} to generated/{name}")
             except Exception as e:
                 logging.error(f"Couldn't write {name}: {e}")
+
+
+def make_room(target_volume):
+    room = generate(target_volume)
+    tree, _ = parse(room)
+    print(room, tree)
+    new_room, path = build(tree)
+    return new_room, path
+
+
+def calibration():
+    for target_volume in [1, 1.5, 2, 2.5, 3, 3.5, 4]:
+        ref = calibrate(
+            lambda r: make_room(1), n=200
+        )  # once per volume tier; save it to a file
+        data = {
+            key: value.tolist() if isinstance(value, np.ndarray) else value
+            for key, value in ref.items()
+        }
+        with open(f"ref/volume_{target_volume}.json", "w") as f:
+            json.dump(data, f, indent=4)
+
+
+if __name__ == "__main__":
+    run()
